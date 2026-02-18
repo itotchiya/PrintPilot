@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma
+
+# Local / reference data (not for GitHub)
+/docs
+/.agents
+/_source-data
+/Tableau Numérique-Offset HAVET-IMB 29-01-2026.csv

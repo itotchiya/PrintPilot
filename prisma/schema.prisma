@@ -1,0 +1,387 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+  CLIENT
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum ProductType {
+  BROCHURE
+  DEPLIANT
+  FLYER
+  CARTE_DE_VISITE
+}
+
+enum PaperCategory {
+  INTERIOR
+  COVER
+  BOTH
+}
+
+enum Orientation {
+  PORTRAIT
+  LANDSCAPE
+  SQUARE
+}
+
+// ─── USER & AUTH ──────────────────────────────────────────────────────────────
+
+model User {
+  id            String      @id @default(cuid())
+  name          String
+  email         String      @unique
+  passwordHash  String
+  role          Role        @default(CLIENT)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  quotes        Quote[]
+
+  @@index([email])
+  @@index([role])
+}
+
+// ─── QUOTES ───────────────────────────────────────────────────────────────────
+
+model Quote {
+  id                String      @id @default(cuid())
+  quoteNumber       String      @unique
+  userId            String
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status            QuoteStatus @default(DRAFT)
+
+  productType       ProductType
+  quantity          Int
+
+  formatName        String
+  formatWidth       Decimal
+  formatHeight      Decimal
+  openFormatWidth   Decimal?
+  openFormatHeight  Decimal?
+
+  pagesInterior     Int?
+  pagesCover        Int?
+  flapSize          Decimal?
+
+  paperInteriorType String?
+  paperInteriorGram Int?
+  paperCoverType    String?
+  paperCoverGram    Int?
+
+  colorModeInterior String?
+  colorModeCover    String?
+  rectoVerso        Boolean     @default(false)
+
+  bindingType       String?
+  foldType          String?
+  foldCount         Int?
+  secondaryFoldType String?
+  secondaryFoldCount Int?
+
+  laminationMode    String?
+  laminationFinish  String?
+
+  packaging         Json?
+  deliveryPoints    Json?
+
+  digitalPrice      Decimal?
+  offsetPrice       Decimal?
+  digitalBreakdown  Json?
+  offsetBreakdown   Json?
+  deliveryCost      Decimal?
+  selectedMethod    String?
+
+  weightPerCopy     Decimal?
+  totalWeight       Decimal?
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ─── PAPER CONFIG ─────────────────────────────────────────────────────────────
+
+model PaperType {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  category    PaperCategory   @default(BOTH)
+  active      Boolean         @default(true)
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  grammages   PaperGrammage[]
+}
+
+model PaperGrammage {
+  id                    String    @id @default(cuid())
+  paperTypeId           String
+  paperType             PaperType @relation(fields: [paperTypeId], references: [id], onDelete: Cascade)
+  grammage              Int
+  pricePerKg            Decimal
+  weightPer1000Sheets   Decimal?
+  availableForDosCarre  Boolean   @default(true)
+  active                Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([paperTypeId, grammage])
+  @@index([paperTypeId])
+}
+
+// ─── FORMAT CONFIG ────────────────────────────────────────────────────────────
+
+model FormatPreset {
+  id            String        @id @default(cuid())
+  name          String        @unique
+  widthCm       Decimal
+  heightCm      Decimal
+  orientation   Orientation   @default(PORTRAIT)
+  productTypes  Json          @default("[]")
+  active        Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+// ─── COLOR CONFIG ─────────────────────────────────────────────────────────────
+
+model ColorMode {
+  id              String    @id @default(cuid())
+  name            String    @unique
+  platesPerSide   Int
+  hasVarnish      Boolean   @default(false)
+  clickMultiplier Decimal   @default(1.0)
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// ─── BINDING / FINISHING CONFIG ───────────────────────────────────────────────
+
+model BindingType {
+  id                String                    @id @default(cuid())
+  name              String                    @unique
+  minPages          Int
+  maxPages          Int?
+  active            Boolean                   @default(true)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  digitalPriceTiers BindingPriceTierDigital[]
+  offsetPriceTiers  BindingPriceTierOffset[]
+}
+
+model BindingPriceTierDigital {
+  id            String      @id @default(cuid())
+  bindingTypeId String
+  bindingType   BindingType @relation(fields: [bindingTypeId], references: [id], onDelete: Cascade)
+  pageRangeMin  Int
+  pageRangeMax  Int
+  qtyMin        Int
+  qtyMax        Int
+  perUnitCost   Decimal
+  setupCost     Decimal     @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([bindingTypeId])
+}
+
+model BindingPriceTierOffset {
+  id              String      @id @default(cuid())
+  bindingTypeId   String
+  bindingType     BindingType @relation(fields: [bindingTypeId], references: [id], onDelete: Cascade)
+  cahiersCount    Int
+  calageCost      Decimal
+  roulagePer1000  Decimal
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([bindingTypeId])
+}
+
+// ─── FOLD CONFIG ──────────────────────────────────────────────────────────────
+
+model FoldType {
+  id              String      @id @default(cuid())
+  name            String      @unique
+  maxFolds        Int         @default(6)
+  canBeSecondary  Boolean     @default(false)
+  active          Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  costs           FoldCost[]
+}
+
+model FoldCost {
+  id          String    @id @default(cuid())
+  foldTypeId  String
+  foldType    FoldType  @relation(fields: [foldTypeId], references: [id], onDelete: Cascade)
+  numFolds    Int
+  cost        Decimal
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([foldTypeId, numFolds])
+  @@index([foldTypeId])
+}
+
+// ─── LAMINATION CONFIG ────────────────────────────────────────────────────────
+
+model LaminationMode {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model LaminationFinish {
+  id                    String                  @id @default(cuid())
+  name                  String                  @unique
+  offsetPricePerM2      Decimal?
+  offsetCalageForfait   Decimal?
+  offsetMinimumBilling  Decimal?
+  active                Boolean                 @default(true)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  digitalPriceTiers     LaminationPriceTier[]
+}
+
+model LaminationPriceTier {
+  id            String            @id @default(cuid())
+  finishId      String
+  finish        LaminationFinish  @relation(fields: [finishId], references: [id], onDelete: Cascade)
+  qtyMin        Int
+  qtyMax        Int
+  pricePerSheet Decimal
+  setupCost     Decimal           @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([finishId])
+}
+
+// ─── PACKAGING CONFIG ─────────────────────────────────────────────────────────
+
+model PackagingOption {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  type          String
+  costPerUnit   Decimal   @default(0)
+  costPerOrder  Decimal   @default(0)
+  appliesTo     Json      @default("[]")
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ─── DELIVERY CONFIG ──────────────────────────────────────────────────────────
+
+model Department {
+  id            String    @id @default(cuid())
+  code          String    @unique
+  name          String
+  zone          Int
+  isSpecialZone Boolean   @default(false)
+  displayName   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([zone])
+}
+
+model Carrier {
+  id            String          @id @default(cuid())
+  name          String          @unique
+  active        Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  deliveryRates DeliveryRate[]
+}
+
+model DeliveryRate {
+  id          String    @id @default(cuid())
+  carrierId   String
+  carrier     Carrier   @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+  zone        Int
+  maxWeightKg Decimal
+  price       Decimal
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([carrierId, zone, maxWeightKg])
+  @@index([carrierId])
+  @@index([zone])
+}
+
+// ─── OFFSET / DIGITAL / MARGIN CONFIG (Key-Value) ─────────────────────────────
+
+model OffsetConfig {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  value       Decimal
+  unit        String?
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model DigitalConfig {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  value       Decimal
+  unit        String?
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model MarginConfig {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  value       Decimal
+  unit        String?
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─── MACHINE / IMPOSITION CONFIG ──────────────────────────────────────────────
+
+model MachineFormat {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  widthCm   Decimal
+  heightCm  Decimal
+  isDefault Boolean   @default(false)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model FormatClickDivisor {
+  id                String    @id @default(cuid())
+  formatName        String    @unique
+  divisorRecto      Decimal
+  divisorRectoVerso Decimal
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
