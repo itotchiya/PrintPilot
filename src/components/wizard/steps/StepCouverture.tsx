@@ -186,7 +186,7 @@ export function StepCouverture({ data, updateData }: StepProps) {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-bold text-foreground">Couverture</h2>
+        <h2 className="text-xl font-bold text-foreground">Elements 1</h2>
         <p className="text-sm text-muted-foreground">
           Papier, couleurs et finitions pour la couverture
           {!isBrochure && " du produit"}

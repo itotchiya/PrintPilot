@@ -84,7 +84,7 @@ export function calcOpenFormat(
   return { widthCm, heightCm };
 }
 
-// Steps visible for each product type (7 steps: 4=Couverture, 5=Intérieur only for brochure)
+// Steps visible for each product type (7 steps: 4=Elements 1, 5=Elements 2 only for brochure)
 export function getVisibleSteps(p: ProductType | null): number[] {
   if (p === "BROCHURE") return [1, 2, 3, 4, 5, 6, 7];
   if (p === "DEPLIANT") return [1, 2, 4, 6, 7];
@@ -98,8 +98,8 @@ export function getStepLabel(step: number): string {
     1: "Produit",
     2: "Quantité & Format",
     3: "Pages",
-    4: "Couverture",
-    5: "Intérieur",
+    4: "Elements 1",
+    5: "Elements 2",
     6: "Livraison",
     7: "Récapitulatif",
   };
