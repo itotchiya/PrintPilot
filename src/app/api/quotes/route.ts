@@ -82,6 +82,39 @@ export async function POST(request: NextRequest) {
 
     const quoteNumber = generateQuoteNumber();
 
+    // Resolve IDs to names for display in quote and PDF
+    const [
+      paperInterior,
+      paperCover,
+      colorInterior,
+      colorCover,
+      binding,
+      fold,
+      lamination,
+    ] = await Promise.all([
+      body.paperInteriorTypeId
+        ? prisma.paperType.findUnique({ where: { id: body.paperInteriorTypeId }, select: { name: true } })
+        : null,
+      body.paperCoverTypeId
+        ? prisma.paperType.findUnique({ where: { id: body.paperCoverTypeId }, select: { name: true } })
+        : null,
+      body.colorModeInteriorId
+        ? prisma.colorMode.findUnique({ where: { id: body.colorModeInteriorId }, select: { name: true } })
+        : null,
+      body.colorModeCoverId
+        ? prisma.colorMode.findUnique({ where: { id: body.colorModeCoverId }, select: { name: true } })
+        : null,
+      body.bindingTypeId
+        ? prisma.bindingType.findUnique({ where: { id: body.bindingTypeId }, select: { name: true } })
+        : null,
+      body.foldTypeId
+        ? prisma.foldType.findUnique({ where: { id: body.foldTypeId }, select: { name: true } })
+        : null,
+      body.laminationFinishId
+        ? prisma.laminationFinish.findUnique({ where: { id: body.laminationFinishId }, select: { name: true } })
+        : null,
+    ]);
+
     const quote = await prisma.quote.create({
       data: {
         quoteNumber,
@@ -97,20 +130,20 @@ export async function POST(request: NextRequest) {
         pagesInterior: body.pagesInterior ?? null,
         pagesCover: body.pagesCover ?? 0,
         flapSize: body.flapSizeCm ?? 0,
-        paperInteriorType: body.paperInteriorTypeId ?? null,
+        paperInteriorType: paperInterior?.name ?? body.paperInteriorTypeId ?? null,
         paperInteriorGram: body.paperInteriorGrammage ?? null,
-        paperCoverType: body.paperCoverTypeId ?? null,
+        paperCoverType: paperCover?.name ?? body.paperCoverTypeId ?? null,
         paperCoverGram: body.paperCoverGrammage ?? null,
-        colorModeInterior: body.colorModeInteriorId ?? null,
-        colorModeCover: body.colorModeCoverId ?? null,
+        colorModeInterior: colorInterior?.name ?? body.colorModeInteriorId ?? null,
+        colorModeCover: colorCover?.name ?? body.colorModeCoverId ?? null,
         rectoVerso: body.rectoVerso ?? false,
-        bindingType: body.bindingTypeId ?? null,
-        foldType: body.foldTypeId ?? null,
+        bindingType: binding?.name ?? body.bindingTypeId ?? null,
+        foldType: fold?.name ?? body.foldTypeId ?? null,
         foldCount: body.foldCount ?? 0,
         secondaryFoldType: body.secondaryFoldType ?? null,
         secondaryFoldCount: body.secondaryFoldCount ?? 0,
         laminationMode: body.laminationMode ?? null,
-        laminationFinish: body.laminationFinishId ?? null,
+        laminationFinish: lamination?.name ?? body.laminationFinishId ?? null,
         packaging: body.packaging ? JSON.parse(JSON.stringify(body.packaging)) : null,
         deliveryPoints: body.deliveryPoints ? JSON.parse(JSON.stringify(body.deliveryPoints)) : null,
         digitalPrice: body.digitalTotal ?? null,

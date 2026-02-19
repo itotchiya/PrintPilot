@@ -1,4 +1,4 @@
-﻿import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import type { QuoteInput } from "./types";
 import { calcWeightPerCopyGrams, estimateSpineThicknessCm } from "./weight";
 import { calcPosesPerSheet, calcCahierStructure } from "./imposition";
@@ -8,6 +8,13 @@ import { calcOffsetPrice } from "./offset";
 import type { OffsetInput, OffsetBreakdown } from "./offset";
 import { calcDeliveryCost } from "./delivery";
 import type { DeliveryRateData } from "./delivery";
+
+/** Safely coerce Prisma Decimal or any value to number; avoids NaN (which JSON serializes to null). */
+function toNum(v: unknown): number {
+  if (typeof v === "number" && !Number.isNaN(v)) return v;
+  const n = parseFloat(String(v ?? "0"));
+  return Number.isNaN(n) ? 0 : n;
+}
 
 export interface PricingResult {
   digitalTotal: number;
@@ -54,7 +61,7 @@ export async function calculatePricing(input: QuoteInput): Promise<PricingResult
 
   function cfgVal(rows: { key: string; value: unknown }[], key: string, fallback = 0): number {
     const row = rows.find(r => r.key === key);
-    return row ? Number(row.value) : fallback;
+    return row ? toNum(row.value) : fallback;
   }
 
   const digitalConfig = {
@@ -92,10 +99,14 @@ export async function calculatePricing(input: QuoteInput): Promise<PricingResult
   const pagesInterior = input.pagesInterior ?? 0;
 
   const interiorPaperType = paperTypes.find(p => p.id === input.paperInteriorTypeId);
-  const interiorGrammage = interiorPaperType?.grammages.find(g => g.grammage === input.paperInteriorGrammage);
+  const interiorGrammage = interiorPaperType?.grammages.find(
+    g => toNum(g.grammage) === toNum(input.paperInteriorGrammage)
+  );
 
   const coverPaperType = hasCover ? paperTypes.find(p => p.id === input.paperCoverTypeId) : null;
-  const coverGrammage = coverPaperType?.grammages.find(g => g.grammage === input.paperCoverGrammage) ?? null;
+  const coverGrammage = coverPaperType?.grammages.find(
+    g => toNum(g.grammage) === toNum(input.paperCoverGrammage)
+  ) ?? null;
 
   const colorModeInterior = colorModes.find(c => c.id === input.colorModeInteriorId);
   const colorModeCover = hasCover ? colorModes.find(c => c.id === input.colorModeCoverId) : null;
@@ -108,15 +119,17 @@ export async function calculatePricing(input: QuoteInput): Promise<PricingResult
 
   const foldType = input.foldTypeId ? foldTypes.find(f => f.id === input.foldTypeId) : null;
   const foldCostRow = foldType?.costs.find(c => c.numFolds === input.foldCount);
-  const foldCost = foldCostRow ? Number(foldCostRow.cost) : 0;
+  const foldCost = foldCostRow ? toNum(foldCostRow.cost) : 0;
 
   const machineFormat = machineFormats[0] ?? { widthCm: 65, heightCm: 92 };
-  const machineWidthCm = Number(machineFormat.widthCm);
-  const machineHeightCm = Number(machineFormat.heightCm);
+  const machineWidthCm = toNum(machineFormat.widthCm) || 65;
+  const machineHeightCm = toNum(machineFormat.heightCm) || 92;
 
+  const productWidthCm = toNum(input.format?.widthCm) || 21;
+  const productHeightCm = toNum(input.format?.heightCm) || 29.7;
   const posesPerSheet = calcPosesPerSheet({
-    productWidthCm: input.format.widthCm,
-    productHeightCm: input.format.heightCm,
+    productWidthCm,
+    productHeightCm,
     machineWidthCm,
     machineHeightCm,
     bleedCm: 0.3,
@@ -131,8 +144,8 @@ export async function calculatePricing(input: QuoteInput): Promise<PricingResult
     : 0;
 
   const weightPerCopyGrams = calcWeightPerCopyGrams({
-    widthCm: input.format.widthCm,
-    heightCm: input.format.heightCm,
+    widthCm: productWidthCm,
+    heightCm: productHeightCm,
     grammageInterior: input.paperInteriorGrammage ?? 90,
     grammageCouvreture: hasCover ? (input.paperCoverGrammage ?? null) : null,
     pagesInterior: hasCover ? pagesInterior : 2,
@@ -143,8 +156,8 @@ export async function calculatePricing(input: QuoteInput): Promise<PricingResult
   const primaryCarrier = carriers[0];
   const deliveryRates: DeliveryRateData[] = (primaryCarrier?.deliveryRates ?? []).map(r => ({
     zone: r.zone,
-    maxWeightKg: Number(r.maxWeightKg),
-    price: Number(r.price),
+    maxWeightKg: toNum(r.maxWeightKg),
+    price: toNum(r.price),
   }));
 
   const deliveryPoints = input.deliveryPoints
@@ -161,27 +174,27 @@ export async function calculatePricing(input: QuoteInput): Promise<PricingResult
 
   const digitalClickDivisors = clickDivisors.map(d => ({
     formatName: d.formatName,
-    divisorRecto: Number(d.divisorRecto),
-    divisorRectoVerso: Number(d.divisorRectoVerso),
+    divisorRecto: toNum(d.divisorRecto),
+    divisorRectoVerso: toNum(d.divisorRectoVerso),
   }));
 
   const digitalInput: DigitalInput = {
     productType: input.productType,
     quantity: input.quantity,
-    widthCm: input.format.widthCm,
-    heightCm: input.format.heightCm,
+    widthCm: productWidthCm,
+    heightCm: productHeightCm,
     pagesInterior,
     hasCover,
     rectoVerso: input.rectoVerso,
     interiorGrammageData: {
       grammage: input.paperInteriorGrammage ?? 90,
-      pricePerKg: Number(interiorGrammage?.pricePerKg ?? 1.0),
-      weightPer1000Sheets: interiorGrammage?.weightPer1000Sheets ? Number(interiorGrammage.weightPer1000Sheets) : null,
+      pricePerKg: toNum(interiorGrammage?.pricePerKg ?? 1.0),
+      weightPer1000Sheets: interiorGrammage?.weightPer1000Sheets ? toNum(interiorGrammage.weightPer1000Sheets) : null,
     },
     coverGrammageData: (hasCover && coverGrammage) ? {
       grammage: input.paperCoverGrammage ?? 250,
-      pricePerKg: Number(coverGrammage.pricePerKg),
-      weightPer1000Sheets: coverGrammage.weightPer1000Sheets ? Number(coverGrammage.weightPer1000Sheets) : null,
+      pricePerKg: toNum(coverGrammage.pricePerKg),
+      weightPer1000Sheets: coverGrammage.weightPer1000Sheets ? toNum(coverGrammage.weightPer1000Sheets) : null,
     } : null,
     colorModeName: colorModeInterior?.name ?? "Quadrichromie",
     colorModePlatesPerSide: colorModeInterior?.platesPerSide ?? 4,
@@ -191,15 +204,15 @@ export async function calculatePricing(input: QuoteInput): Promise<PricingResult
       pageRangeMax: t.pageRangeMax,
       qtyMin: t.qtyMin,
       qtyMax: t.qtyMax,
-      perUnitCost: Number(t.perUnitCost),
-      setupCost: Number(t.setupCost),
+      perUnitCost: toNum(t.perUnitCost),
+      setupCost: toNum(t.setupCost),
     })),
     laminationMode: input.laminationMode,
     laminationTiers: (laminationFinish?.digitalPriceTiers ?? []).map(t => ({
       qtyMin: t.qtyMin,
       qtyMax: t.qtyMax,
-      pricePerSheet: Number(t.pricePerSheet),
-      setupCost: Number(t.setupCost),
+      pricePerSheet: toNum(t.pricePerSheet),
+      setupCost: toNum(t.setupCost),
     })),
     config: digitalConfig,
     clickDivisors: digitalClickDivisors,
@@ -208,38 +221,40 @@ export async function calculatePricing(input: QuoteInput): Promise<PricingResult
   const digitalBreakdown = calcDigitalPrice(digitalInput);
   const digitalTotal = (digitalBreakdown.subtotal + deliveryResult.total) * (1 + digitalMarginRate);
 
+  const openWidthCm = toNum(input.openFormat?.widthCm) || productWidthCm;
+  const openHeightCm = toNum(input.openFormat?.heightCm) || productHeightCm;
   const offsetInput: OffsetInput = {
     productType: input.productType,
     quantity: input.quantity,
-    widthCm: input.format.widthCm,
-    heightCm: input.format.heightCm,
-    openWidthCm: input.openFormat?.widthCm ?? input.format.widthCm,
-    openHeightCm: input.openFormat?.heightCm ?? input.format.heightCm,
+    widthCm: productWidthCm,
+    heightCm: productHeightCm,
+    openWidthCm,
+    openHeightCm,
     pagesInterior,
     hasCover,
     rectoVerso: input.rectoVerso,
-    interiorPricePerKg: Number(interiorGrammage?.pricePerKg ?? 1.0),
+    interiorPricePerKg: toNum(interiorGrammage?.pricePerKg ?? 1.0),
     interiorGrammage: input.paperInteriorGrammage ?? 90,
-    coverPricePerKg: hasCover ? Number(coverGrammage?.pricePerKg ?? 1.0) : null,
+    coverPricePerKg: hasCover ? toNum(coverGrammage?.pricePerKg ?? 1.0) : null,
     coverGrammage: hasCover ? (input.paperCoverGrammage ?? null) : null,
     machineWidthCm,
     machineHeightCm,
     posesPerSheet,
-    interiorPlatesPerSide: colorModeInterior?.platesPerSide ?? 4,
-    coverPlatesPerSide: colorModeCover?.platesPerSide ?? 4,
+    interiorPlatesPerSide: toNum(colorModeInterior?.platesPerSide ?? 4),
+    coverPlatesPerSide: toNum(colorModeCover?.platesPerSide ?? 4),
     bindingTypeName: bindingType?.name ?? null,
     bindingOffsetTiers: (bindingType?.offsetPriceTiers ?? []).map(t => ({
       cahiersCount: t.cahiersCount,
-      calageCost: Number(t.calageCost),
-      roulagePer1000: Number(t.roulagePer1000),
+      calageCost: toNum(t.calageCost),
+      roulagePer1000: toNum(t.roulagePer1000),
     })),
     numCahiers: cahierStruct.numCahiers,
     cahiersCount: cahierStruct.cahiersCount,
     laminationMode: input.laminationMode,
     laminationConfig: laminationFinish ? {
-      offsetPricePerM2: Number(laminationFinish.offsetPricePerM2),
-      offsetCalageForfait: Number(laminationFinish.offsetCalageForfait),
-      offsetMinimumBilling: Number(laminationFinish.offsetMinimumBilling),
+      offsetPricePerM2: toNum(laminationFinish.offsetPricePerM2),
+      offsetCalageForfait: toNum(laminationFinish.offsetCalageForfait),
+      offsetMinimumBilling: toNum(laminationFinish.offsetMinimumBilling),
     } : null,
     foldCount: input.foldCount,
     foldCost,
@@ -247,13 +262,34 @@ export async function calculatePricing(input: QuoteInput): Promise<PricingResult
   };
 
   const offsetBreakdown = calcOffsetPrice(offsetInput);
-  const offsetTotal = (offsetBreakdown.subtotal + deliveryResult.total) * (1 + offsetMarginRate);
+  const offsetSubtotal = Number(offsetBreakdown.subtotal);
+  const offsetTotalRaw = (Number.isFinite(offsetSubtotal) ? offsetSubtotal : 0) + deliveryResult.total;
+  const offsetTotal = offsetTotalRaw * (1 + offsetMarginRate);
+
+  const safeOffsetTotal = Number.isFinite(offsetTotal) ? Math.round(offsetTotal * 100) / 100 : 0;
+  const safeOffsetBreakdown = {
+    ...offsetBreakdown,
+    paperCostInterior: toNum(offsetBreakdown.paperCostInterior),
+    paperCostCover: toNum(offsetBreakdown.paperCostCover),
+    plateCost: toNum(offsetBreakdown.plateCost),
+    calageCost: toNum(offsetBreakdown.calageCost),
+    runningCost: toNum(offsetBreakdown.runningCost),
+    fileProcessing: toNum(offsetBreakdown.fileProcessing),
+    bindingCost: toNum(offsetBreakdown.bindingCost),
+    laminationCost: toNum(offsetBreakdown.laminationCost),
+    foldCost: toNum(offsetBreakdown.foldCost),
+    packagingCost: toNum(offsetBreakdown.packagingCost),
+    subtotal: toNum(offsetBreakdown.subtotal),
+    deliveryCost: deliveryResult.total,
+    margin: toNum(offsetBreakdown.margin),
+    total: safeOffsetTotal,
+  };
 
   return {
     digitalTotal: Math.round(digitalTotal * 100) / 100,
-    offsetTotal: Math.round(offsetTotal * 100) / 100,
+    offsetTotal: safeOffsetTotal,
     digitalBreakdown: { ...digitalBreakdown, deliveryCost: deliveryResult.total, total: digitalTotal },
-    offsetBreakdown: { ...offsetBreakdown, deliveryCost: deliveryResult.total, total: offsetTotal },
+    offsetBreakdown: safeOffsetBreakdown,
     deliveryCost: deliveryResult.total,
     weightPerCopyGrams,
     currency: "EUR",

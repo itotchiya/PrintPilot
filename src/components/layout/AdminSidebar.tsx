@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -19,9 +19,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   LayoutDashboard,
-  BarChart3,
   Calculator,
+  Briefcase,
   FileText,
+  PlusCircle,
   Palette,
   Ruler,
   Paintbrush,
@@ -44,9 +45,10 @@ import {
 
 const topLinks = [
   { label: "Tableau de bord", href: "/admin", icon: LayoutDashboard, exact: true },
-  { label: "Vue d'ensemble", href: "/admin/config", icon: BarChart3, exact: true },
-  { label: "Devis clients", href: "/admin/quotes", icon: Calculator },
-  { label: "Mes devis", href: "/quotes", icon: FileText },
+  { label: "Moteur de calcul", href: "/admin/config", icon: Calculator, exact: true },
+  { label: "Devis com.", href: "/admin/quotes", icon: Briefcase },
+  { label: "Mes devis", href: "/quotes", icon: FileText, badge: true },
+  { label: "Nouveau devis", href: "/dashboard/new", icon: PlusCircle },
 ];
 
 const engineLinks = [
@@ -85,12 +87,14 @@ function NavLink({
   label,
   active,
   onClick,
+  badge,
 }: {
   href: string;
   icon: React.ElementType;
   label: string;
   active: boolean;
   onClick?: () => void;
+  badge?: number | null;
 }) {
   return (
     <li>
@@ -105,7 +109,12 @@ function NavLink({
         )}
       >
         <Icon className="h-4 w-4 shrink-0" />
-        {label}
+        <span className="flex-1 truncate">{label}</span>
+        {badge != null && (
+          <span className="shrink-0 rounded-full bg-muted-foreground/20 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+            {badge > 99 ? "99+" : badge}
+          </span>
+        )}
       </Link>
     </li>
   );
@@ -118,6 +127,17 @@ function SidebarNav({
   pathname: string;
   onNavigate?: () => void;
 }) {
+  const [quotesCount, setQuotesCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("/api/quotes?limit=1")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data: { total?: number } | null) => {
+        if (data && typeof data.total === "number") setQuotesCount(data.total);
+      })
+      .catch(() => {});
+  }, []);
+
   const isActive = (href: string, exact = false) =>
     exact ? pathname === href : pathname.startsWith(href);
 
@@ -135,8 +155,9 @@ function SidebarNav({
               href={link.href}
               icon={link.icon}
               label={link.label}
-              active={isActive(link.href, link.exact)}
+              active={isActive(link.href, "exact" in link && link.exact)}
               onClick={onNavigate}
+              badge={"badge" in link && link.badge ? quotesCount : undefined}
             />
           ))}
         </ul>

@@ -32,16 +32,27 @@ import {
   CheckCircle2,
   Star,
   Loader2,
-  Trash2,
   Monitor,
   Layers,
 } from "lucide-react";
+import QuoteDetailHeader from "@/components/QuoteDetailHeader";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 type QuoteStatus = "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "EXPIRED";
 type ProductType = "BROCHURE" | "DEPLIANT" | "FLYER" | "CARTE_DE_VISITE";
 
-interface DeliveryPoint {
+/** Display shape for the delivery points table */
+interface DeliveryPointDisplay {
+  name: string;
+  department: string;
+  quantity: number;
+}
+
+/** Stored shape from wizard (QuoteDeliveryPoint) */
+interface StoredDeliveryPoint {
+  departmentName?: string;
+  departmentCode?: string;
+  copies?: number;
   name?: string;
   address?: string;
   department?: string;
@@ -91,25 +102,6 @@ interface Quote {
   updatedAt: string;
   user?: { id: string; name: string; email: string };
 }
-
-const STATUS_LABELS: Record<QuoteStatus, string> = {
-  DRAFT: "Brouillon",
-  SENT: "Envoyé",
-  ACCEPTED: "Accepté",
-  REJECTED: "Refusé",
-  EXPIRED: "Expiré",
-};
-
-const STATUS_CLASSES: Record<QuoteStatus, string> = {
-  DRAFT: "bg-secondary text-secondary-foreground border-transparent",
-  SENT: "bg-blue-100 text-blue-700 border-transparent dark:bg-blue-900/30 dark:text-blue-400",
-  ACCEPTED:
-    "bg-green-100 text-green-700 border-transparent dark:bg-green-900/30 dark:text-green-400",
-  REJECTED:
-    "bg-red-100 text-red-700 border-transparent dark:bg-red-900/30 dark:text-red-400",
-  EXPIRED:
-    "bg-orange-100 text-orange-700 border-transparent dark:bg-orange-900/30 dark:text-orange-400",
-};
 
 const PRODUCT_LABELS: Record<ProductType, string> = {
   BROCHURE: "Brochure",
@@ -243,42 +235,25 @@ export default function QuoteDetailPage() {
     digitalPrice != null &&
     offsetPrice < digitalPrice;
 
-  const deliveryPoints = Array.isArray(quote.deliveryPoints)
-    ? (quote.deliveryPoints as DeliveryPoint[])
-    : null;
+  // Normalize delivery points: wizard stores departmentName, departmentCode, copies
+  const deliveryPoints: DeliveryPointDisplay[] = Array.isArray(quote.deliveryPoints)
+    ? (quote.deliveryPoints as StoredDeliveryPoint[]).map((p) => ({
+        name: p.departmentName ?? p.name ?? "—",
+        department: p.departmentCode ?? p.department ?? "—",
+        quantity: p.copies ?? p.quantity ?? 0,
+      }))
+    : [];
+  const hasDeliveryPoints = deliveryPoints.length > 0;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="-ml-2" asChild>
-            <Link href="/quotes">
-              <ArrowLeft className="mr-1.5 h-4 w-4" />
-              Mes devis
-            </Link>
-          </Button>
-          <div className="h-4 w-px bg-border" />
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-semibold tracking-wide">
-              {quote.quoteNumber}
-            </span>
-            <Badge className={STATUS_CLASSES[quote.status]}>
-              {STATUS_LABELS[quote.status]}
-            </Badge>
-          </div>
-        </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-destructive/30 text-destructive hover:bg-destructive/5 hover:text-destructive"
-          onClick={() => setDeleteOpen(true)}
-        >
-          <Trash2 className="mr-1.5 h-4 w-4" />
-          Supprimer
-        </Button>
-      </div>
+      <QuoteDetailHeader
+        quoteId={id}
+        quoteNumber={quote.quoteNumber}
+        status={quote.status}
+        variant="detail"
+        onDeleteClick={() => setDeleteOpen(true)}
+      />
 
       <p className="text-xs text-muted-foreground">
         Créé le {formatDate(quote.createdAt)} · Mis à jour le{" "}
@@ -559,7 +534,7 @@ export default function QuoteDetailPage() {
       </Card>
 
       {/* Delivery points */}
-      {deliveryPoints && deliveryPoints.length > 0 && (
+      {hasDeliveryPoints && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Points de livraison</CardTitle>
@@ -576,21 +551,14 @@ export default function QuoteDetailPage() {
               <TableBody>
                 {deliveryPoints.map((point, i) => (
                   <TableRow key={i}>
-                    <TableCell className="text-sm">
-                      <div className="font-medium">{point.name ?? "—"}</div>
-                      {point.address && (
-                        <div className="text-xs text-muted-foreground">
-                          {point.address}
-                        </div>
-                      )}
+                    <TableCell className="text-sm font-medium">
+                      {point.name}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {point.department ?? "—"}
+                      {point.department}
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums">
-                      {point.quantity != null
-                        ? point.quantity.toLocaleString("fr-FR")
-                        : "—"}
+                      {point.quantity.toLocaleString("fr-FR")}
                     </TableCell>
                   </TableRow>
                 ))}

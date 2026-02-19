@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import PrintButton from "./PrintButton";
+import PrintPageHeader from "./PrintPageHeader";
+import SetPrintDocumentTitle from "./SetPrintDocumentTitle";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -97,19 +98,64 @@ export default async function QuotePrintPage({ params }: Props) {
 
   const sColor = statusColor(quote.status);
 
+  // Normalize delivery points for display (wizard stores departmentName, departmentCode, copies)
+  type StoredPoint = {
+    departmentName?: string;
+    departmentCode?: string;
+    copies?: number;
+    name?: string;
+    department?: string;
+    quantity?: number;
+  };
+  const rawPoints = (quote.deliveryPoints as StoredPoint[] | null) ?? [];
+  const deliveryPoints = Array.isArray(rawPoints)
+    ? rawPoints.map((p) => ({
+        name: p.departmentName ?? p.name ?? "—",
+        department: p.departmentCode ?? p.department ?? "—",
+        quantity: p.copies ?? p.quantity ?? 0,
+      }))
+    : [];
+  const hasDeliveryPoints = deliveryPoints.length > 0;
+
   return (
     <>
-      {/* Print styles injected via Next.js */}
+      {/* Print styles: same padding on every page via @page; page number bottom-right; sections don't split. */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
-          body > div { background: #fff !important; }
+          body * { visibility: hidden; }
+          .print-page, .print-page * { visibility: visible; }
           .print-page {
-            box-shadow: none !important;
-            margin: 0 !important;
+            position: relative !important;
+            left: 0 !important;
+            top: 0 !important;
             width: 100% !important;
+            min-height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            background: #fff !important;
           }
-          @page { size: A4; margin: 18mm; }
+          .print-section {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .print-page-number {
+            display: block !important;
+            position: fixed !important;
+            bottom: 10mm !important;
+            right: 8.5mm !important;
+            font-size: 11px !important;
+            color: #6c757d !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif !important;
+          }
+          .print-page-number::after {
+            content: counter(page) " / " counter(pages) !important;
+          }
+          @page {
+            size: A4;
+            margin: 7.5mm 8.5mm 12mm 8.5mm;
+          }
         }
         .print-page {
           background: #ffffff;
@@ -117,86 +163,47 @@ export default async function QuotePrintPage({ params }: Props) {
           max-width: 100%;
           min-height: 270mm;
           margin: 24px auto;
-          padding: 36px 40px;
+          padding: 28px 32px;
           box-shadow: 0 4px 32px rgba(0,0,0,0.10);
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
           color: #212529;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
         }
+        .print-page-number { display: none; }
       `}</style>
 
-      {/* Toolbar — hidden on print */}
-      <div
-        className="no-print"
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: 12,
-          padding: "20px 0 8px",
-          background: "#f8f9fa",
-          borderBottom: "1px solid #e9ecef",
-          marginBottom: 0,
-        }}
-      >
-        <PrintButton />
-        <a
-          href={`/quotes`}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 18px",
-            borderRadius: 8,
-            border: "1px solid #dee2e6",
-            background: "#fff",
-            color: "#495057",
-            fontSize: 14,
-            fontWeight: 500,
-            textDecoration: "none",
-          }}
-        >
-          ← Retour aux devis
-        </a>
-      </div>
+      <SetPrintDocumentTitle quoteNumber={quote.quoteNumber} />
+      <PrintPageHeader
+        quoteId={id}
+        quoteNumber={quote.quoteNumber}
+        status={quote.status as "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "EXPIRED"}
+      />
 
-      {/* A4 document */}
+
+      {/* A4 document — only this section is printed / saved as PDF (matches preview exactly) */}
       <div className="print-page">
-        {/* ── Company header ────────────────────────────────────────────── */}
+        {/* ── Company header: logo only (height matches right column) ─────── */}
         <div
+          className="print-section"
           style={{
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "flex-start",
+            alignItems: "center",
             marginBottom: 36,
-            paddingBottom: 24,
-            borderBottom: "2px solid #212529",
           }}
         >
-          <div>
-            <div
+          <div style={{ display: "flex", alignItems: "center" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/uploads/logo-PDF.svg"
+              alt="PrintPilot"
               style={{
-                fontSize: 28,
-                fontWeight: 800,
-                letterSpacing: "-0.5px",
-                color: "#212529",
-                lineHeight: 1,
+                height: 64,
+                width: "auto",
+                objectFit: "contain",
               }}
-            >
-              HAVET-IMB
-            </div>
-            <div
-              style={{
-                fontSize: 11,
-                color: "#6c757d",
-                marginTop: 5,
-                letterSpacing: 2,
-                textTransform: "uppercase" as const,
-              }}
-            >
-              PrintPilot · Gestion des devis
-            </div>
+            />
           </div>
 
           <div style={{ textAlign: "right" as const }}>
@@ -234,7 +241,7 @@ export default async function QuotePrintPage({ params }: Props) {
         </div>
 
         {/* ── Client info ───────────────────────────────────────────────── */}
-        <div style={{ marginBottom: 28 }}>
+        <div className="print-section" style={{ marginBottom: 28 }}>
           <div
             style={{
               fontSize: 10,
@@ -256,7 +263,7 @@ export default async function QuotePrintPage({ params }: Props) {
         </div>
 
         {/* ── Specifications table ──────────────────────────────────────── */}
-        <div style={{ marginBottom: 28 }}>
+        <div className="print-section" style={{ marginBottom: 28 }}>
           <div
             style={{
               fontSize: 10,
@@ -358,8 +365,107 @@ export default async function QuotePrintPage({ params }: Props) {
           </table>
         </div>
 
+        {/* ── Points de livraison ───────────────────────────────────────── */}
+        {hasDeliveryPoints && (
+          <div className="print-section" style={{ marginBottom: 28 }}>
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: 2,
+                textTransform: "uppercase" as const,
+                color: "#adb5bd",
+                marginBottom: 10,
+              }}
+            >
+              Points de livraison
+            </div>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse" as const,
+                border: "1px solid #e9ecef",
+                fontSize: 13,
+              }}
+            >
+              <thead>
+                <tr style={{ background: "#f8f9fa" }}>
+                  <th
+                    style={{
+                      padding: "10px 14px",
+                      textAlign: "left",
+                      fontWeight: 600,
+                      color: "#495057",
+                      borderBottom: "1px solid #e9ecef",
+                    }}
+                  >
+                    Nom / Adresse
+                  </th>
+                  <th
+                    style={{
+                      padding: "10px 14px",
+                      textAlign: "left",
+                      fontWeight: 600,
+                      color: "#495057",
+                      borderBottom: "1px solid #e9ecef",
+                    }}
+                  >
+                    Département
+                  </th>
+                  <th
+                    style={{
+                      padding: "10px 14px",
+                      textAlign: "right",
+                      fontWeight: 600,
+                      color: "#495057",
+                      borderBottom: "1px solid #e9ecef",
+                    }}
+                  >
+                    Quantité
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {deliveryPoints.map((point, i) => (
+                  <tr key={i}>
+                    <td
+                      style={{
+                        padding: "8px 14px",
+                        borderBottom: "1px solid #e9ecef",
+                        color: "#212529",
+                      }}
+                    >
+                      {point.name}
+                    </td>
+                    <td
+                      style={{
+                        padding: "8px 14px",
+                        borderBottom: "1px solid #e9ecef",
+                        color: "#212529",
+                      }}
+                    >
+                      {point.department}
+                    </td>
+                    <td
+                      style={{
+                        padding: "8px 14px",
+                        borderBottom: "1px solid #e9ecef",
+                        color: "#212529",
+                        textAlign: "right",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {point.quantity.toLocaleString("fr-FR")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* ── Pricing summary ───────────────────────────────────────────── */}
-        <div style={{ marginBottom: 36 }}>
+        <div className="print-section" style={{ marginBottom: 36 }}>
           <div
             style={{
               fontSize: 10,
@@ -444,6 +550,7 @@ export default async function QuotePrintPage({ params }: Props) {
 
         {/* ── Footer / CGV ──────────────────────────────────────────────── */}
         <div
+          className="print-section"
           style={{
             borderTop: "1px solid #e9ecef",
             paddingTop: 18,
@@ -466,6 +573,9 @@ export default async function QuotePrintPage({ params }: Props) {
             <strong>HAVET-IMB · PrintPilot</strong> — contact@havet-imb.fr
           </p>
         </div>
+
+        {/* Page number: fixed bottom-right on every printed page (print only) */}
+        <div className="print-page-number" aria-hidden />
       </div>
     </>
   );
