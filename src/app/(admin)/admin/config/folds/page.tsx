@@ -2,17 +2,12 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2 } from "lucide-react";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfigDialog } from "@/components/admin/ConfigDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -27,7 +22,6 @@ import {
   ConfigDataTable,
   type ColumnDef,
 } from "@/components/admin/ConfigDataTable";
-import { ConfigForm } from "@/components/admin/ConfigForm";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { useConfigData } from "@/hooks/useConfigData";
@@ -74,6 +68,8 @@ export default function FoldsConfigPage() {
 
   const [deletingFold, setDeletingFold] = useState<FoldType | null>(null);
   const [isDeletingFold, setIsDeletingFold] = useState(false);
+
+  const [activeTab, setActiveTab] = useState("types");
 
   const openAddFold = () => {
     setEditingFold(null);
@@ -148,9 +144,17 @@ export default function FoldsConfigPage() {
     {
       key: "actions",
       header: "",
-      className: "w-[100px]",
+      className: "w-[130px]",
       cell: (item) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setActiveTab(item.id)}
+            title="Voir les coûts"
+          >
+            <Eye className="size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -179,7 +183,7 @@ export default function FoldsConfigPage() {
         description="Types de plis et coûts par nombre de plis"
       />
 
-      <Tabs defaultValue="types">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="types">Types de plis</TabsTrigger>
           {foldTypes.map((ft) => (
@@ -251,79 +255,74 @@ export default function FoldsConfigPage() {
       </Tabs>
 
       {/* Fold type add/edit dialog */}
-      <Dialog open={foldDialogOpen} onOpenChange={setFoldDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingFold
-                ? "Modifier le type de pli"
-                : "Ajouter un type de pli"}
-            </DialogTitle>
-          </DialogHeader>
-          <ConfigForm
-            title={editingFold ? "Modifier" : "Nouveau type"}
-            onSubmit={handleFoldSubmit}
-            onCancel={() => setFoldDialogOpen(false)}
-            isSubmitting={isSubmittingFold}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="fold-name">Nom</Label>
-              <Input
-                id="fold-name"
-                value={foldForm.name}
-                onChange={(e) =>
-                  setFoldForm((f) => ({ ...f, name: e.target.value }))
-                }
-                required
-              />
-            </div>
+      <ConfigDialog
+        open={foldDialogOpen}
+        onOpenChange={setFoldDialogOpen}
+        title={
+          editingFold
+            ? "Modifier le type de pli"
+            : "Ajouter un type de pli"
+        }
+        onSubmit={handleFoldSubmit}
+        onCancel={() => setFoldDialogOpen(false)}
+        isSubmitting={isSubmittingFold}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="fold-name">Nom</Label>
+          <Input
+            id="fold-name"
+            value={foldForm.name}
+            onChange={(e) =>
+              setFoldForm((f) => ({ ...f, name: e.target.value }))
+            }
+            required
+          />
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="fold-maxFolds">Nombre max de plis</Label>
-              <Input
-                id="fold-maxFolds"
-                type="number"
-                min={1}
-                value={foldForm.maxFolds || ""}
-                onChange={(e) =>
-                  setFoldForm((f) => ({
-                    ...f,
-                    maxFolds: parseInt(e.target.value) || 6,
-                  }))
-                }
-                required
-              />
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="fold-maxFolds">Nombre max de plis</Label>
+          <Input
+            id="fold-maxFolds"
+            type="number"
+            min={1}
+            value={foldForm.maxFolds || ""}
+            onChange={(e) =>
+              setFoldForm((f) => ({
+                ...f,
+                maxFolds: parseInt(e.target.value) || 6,
+              }))
+            }
+            required
+          />
+        </div>
 
-            <div className="flex items-center gap-3">
-              <Switch
-                id="fold-canBeSecondary"
-                checked={foldForm.canBeSecondary}
-                onCheckedChange={(checked) =>
-                  setFoldForm((f) => ({
-                    ...f,
-                    canBeSecondary: checked,
-                  }))
-                }
-              />
-              <Label htmlFor="fold-canBeSecondary">
-                Peut être pli secondaire
-              </Label>
-            </div>
+        <div className="flex items-center gap-3">
+          <Switch
+            id="fold-canBeSecondary"
+            checked={foldForm.canBeSecondary}
+            onCheckedChange={(checked) =>
+              setFoldForm((f) => ({
+                ...f,
+                canBeSecondary: checked,
+              }))
+            }
+          />
+          <Label htmlFor="fold-canBeSecondary">
+            Peut être pli secondaire
+          </Label>
+        </div>
 
-            <div className="flex items-center gap-3">
-              <Switch
-                id="fold-active"
-                checked={foldForm.active}
-                onCheckedChange={(checked) =>
-                  setFoldForm((f) => ({ ...f, active: checked }))
-                }
-              />
-              <Label htmlFor="fold-active">Actif</Label>
-            </div>
-          </ConfigForm>
-        </DialogContent>
-      </Dialog>
+        <div className="flex items-center gap-3">
+          <Switch
+            id="fold-active"
+            checked={foldForm.active}
+            onCheckedChange={(checked) =>
+              setFoldForm((f) => ({ ...f, active: checked }))
+            }
+          />
+          <Label htmlFor="fold-active">Actif</Label>
+        </div>
+      </ConfigDialog>
 
       <DeleteConfirmDialog
         open={!!deletingFold}

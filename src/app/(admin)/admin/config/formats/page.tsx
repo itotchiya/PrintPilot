@@ -9,12 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfigDialog } from "@/components/admin/ConfigDialog";
 import {
   Select,
   SelectContent,
@@ -27,7 +22,6 @@ import {
   ConfigDataTable,
   type ColumnDef,
 } from "@/components/admin/ConfigDataTable";
-import { ConfigForm } from "@/components/admin/ConfigForm";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { useConfigData } from "@/hooks/useConfigData";
@@ -205,119 +199,112 @@ export default function FormatsConfigPage() {
       />
 
       {/* Add / Edit dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {editing ? "Modifier le format" : "Ajouter un format"}
-            </DialogTitle>
-          </DialogHeader>
-          <ConfigForm
-            title={editing ? "Modifier" : "Nouveau format"}
-            onSubmit={handleSubmit}
-            onCancel={() => setDialogOpen(false)}
-            isSubmitting={isSubmitting}
+      <ConfigDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        title={editing ? "Modifier le format" : "Ajouter un format"}
+        onSubmit={handleSubmit}
+        onCancel={() => setDialogOpen(false)}
+        isSubmitting={isSubmitting}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="fmt-name">Nom</Label>
+          <Input
+            id="fmt-name"
+            value={form.name}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, name: e.target.value }))
+            }
+            required
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="fmt-width">Largeur (cm)</Label>
+            <Input
+              id="fmt-width"
+              type="number"
+              step="0.1"
+              value={form.widthCm || ""}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  widthCm: parseFloat(e.target.value) || 0,
+                }))
+              }
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="fmt-height">Hauteur (cm)</Label>
+            <Input
+              id="fmt-height"
+              type="number"
+              step="0.1"
+              value={form.heightCm || ""}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  heightCm: parseFloat(e.target.value) || 0,
+                }))
+              }
+              required
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="fmt-orientation">Orientation</Label>
+          <Select
+            value={form.orientation}
+            onValueChange={(v) =>
+              setForm((f) => ({
+                ...f,
+                orientation: v as FormatPreset["orientation"],
+              }))
+            }
           >
-            <div className="space-y-2">
-              <Label htmlFor="fmt-name">Nom</Label>
-              <Input
-                id="fmt-name"
-                value={form.name}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, name: e.target.value }))
-                }
-                required
-              />
-            </div>
+            <SelectTrigger id="fmt-orientation" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="PORTRAIT">Portrait</SelectItem>
+              <SelectItem value="LANDSCAPE">Paysage</SelectItem>
+              <SelectItem value="SQUARE">Carré</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="fmt-width">Largeur (cm)</Label>
-                <Input
-                  id="fmt-width"
-                  type="number"
-                  step="0.1"
-                  value={form.widthCm || ""}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      widthCm: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                  required
+        <div className="space-y-3">
+          <Label>Types de produit</Label>
+          <div className="grid grid-cols-2 gap-3">
+            {PRODUCT_TYPE_OPTIONS.map((opt) => (
+              <div key={opt.value} className="flex items-center gap-2">
+                <Checkbox
+                  id={`pt-${opt.value}`}
+                  checked={form.productTypes.includes(opt.value)}
+                  onCheckedChange={() => toggleProductType(opt.value)}
                 />
+                <Label htmlFor={`pt-${opt.value}`} className="font-normal">
+                  {opt.label}
+                </Label>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="fmt-height">Hauteur (cm)</Label>
-                <Input
-                  id="fmt-height"
-                  type="number"
-                  step="0.1"
-                  value={form.heightCm || ""}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      heightCm: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                  required
-                />
-              </div>
-            </div>
+            ))}
+          </div>
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="fmt-orientation">Orientation</Label>
-              <Select
-                value={form.orientation}
-                onValueChange={(v) =>
-                  setForm((f) => ({
-                    ...f,
-                    orientation: v as FormatPreset["orientation"],
-                  }))
-                }
-              >
-                <SelectTrigger id="fmt-orientation" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PORTRAIT">Portrait</SelectItem>
-                  <SelectItem value="LANDSCAPE">Paysage</SelectItem>
-                  <SelectItem value="SQUARE">Carré</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-3">
-              <Label>Types de produit</Label>
-              <div className="grid grid-cols-2 gap-3">
-                {PRODUCT_TYPE_OPTIONS.map((opt) => (
-                  <div key={opt.value} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`pt-${opt.value}`}
-                      checked={form.productTypes.includes(opt.value)}
-                      onCheckedChange={() => toggleProductType(opt.value)}
-                    />
-                    <Label htmlFor={`pt-${opt.value}`} className="font-normal">
-                      {opt.label}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Switch
-                id="fmt-active"
-                checked={form.active}
-                onCheckedChange={(checked) =>
-                  setForm((f) => ({ ...f, active: checked }))
-                }
-              />
-              <Label htmlFor="fmt-active">Actif</Label>
-            </div>
-          </ConfigForm>
-        </DialogContent>
-      </Dialog>
+        <div className="flex items-center gap-3">
+          <Switch
+            id="fmt-active"
+            checked={form.active}
+            onCheckedChange={(checked) =>
+              setForm((f) => ({ ...f, active: checked }))
+            }
+          />
+          <Label htmlFor="fmt-active">Actif</Label>
+        </div>
+      </ConfigDialog>
 
       {/* Delete confirmation */}
       <DeleteConfirmDialog

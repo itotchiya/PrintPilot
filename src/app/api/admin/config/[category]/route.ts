@@ -40,7 +40,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const body = await request.json();
     const model = getModel(config.model);
-    const created = await model.create({ data: body });
+    // Department requires displayName; form only sends code, name, zone, isSpecialZone
+    const data =
+      category === "delivery" && typeof body.displayName === "undefined"
+        ? { ...body, displayName: body.name ?? body.code ?? "" }
+        : body;
+    const created = await model.create({ data });
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     return errorResponse(error);

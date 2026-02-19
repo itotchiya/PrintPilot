@@ -7,18 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfigDialog } from "@/components/admin/ConfigDialog";
 import { ConfigPageHeader } from "@/components/admin/ConfigPageHeader";
 import {
   ConfigDataTable,
   type ColumnDef,
 } from "@/components/admin/ConfigDataTable";
-import { ConfigForm } from "@/components/admin/ConfigForm";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { useConfigData } from "@/hooks/useConfigData";
@@ -176,89 +170,82 @@ export default function ColorsConfigPage() {
         isLoading={isLoading}
       />
 
-      <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {editingId ? "Modifier le mode" : "Ajouter un mode"}
-            </DialogTitle>
-          </DialogHeader>
-          <ConfigForm
-            title={editingId ? "Modifier" : "Nouveau mode de couleur"}
-            onSubmit={handleSubmit}
-            onCancel={() => setShowForm(false)}
-            isSubmitting={isSubmitting}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="color-name">Nom</Label>
-              <Input
-                id="color-name"
-                value={formState.name}
-                onChange={(e) =>
-                  setFormState((f) => ({ ...f, name: e.target.value }))
-                }
-                required
-              />
-            </div>
+      <ConfigDialog
+        open={showForm}
+        onOpenChange={setShowForm}
+        title={editingId ? "Modifier le mode" : "Ajouter un mode"}
+        onSubmit={handleSubmit}
+        onCancel={() => setShowForm(false)}
+        isSubmitting={isSubmitting}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="color-name">Nom</Label>
+          <Input
+            id="color-name"
+            value={formState.name}
+            onChange={(e) =>
+              setFormState((f) => ({ ...f, name: e.target.value }))
+            }
+            required
+          />
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="color-plates">Plaques/face</Label>
-              <Input
-                id="color-plates"
-                type="number"
-                min={0}
-                value={formState.platesPerSide || ""}
-                onChange={(e) =>
-                  setFormState((f) => ({
-                    ...f,
-                    platesPerSide: parseInt(e.target.value, 10) || 0,
-                  }))
-                }
-                required
-              />
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="color-plates">Plaques/face</Label>
+          <Input
+            id="color-plates"
+            type="number"
+            min={0}
+            value={formState.platesPerSide || ""}
+            onChange={(e) =>
+              setFormState((f) => ({
+                ...f,
+                platesPerSide: parseInt(e.target.value, 10) || 0,
+              }))
+            }
+            required
+          />
+        </div>
 
-            <div className="flex items-center gap-3">
-              <Switch
-                id="color-varnish"
-                checked={formState.hasVarnish}
-                onCheckedChange={(checked) =>
-                  setFormState((f) => ({ ...f, hasVarnish: !!checked }))
-                }
-              />
-              <Label htmlFor="color-varnish">Vernis</Label>
-            </div>
+        <div className="flex items-center gap-3">
+          <Switch
+            id="color-varnish"
+            checked={formState.hasVarnish}
+            onCheckedChange={(checked) =>
+              setFormState((f) => ({ ...f, hasVarnish: !!checked }))
+            }
+          />
+          <Label htmlFor="color-varnish">Vernis</Label>
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="color-multiplier">Multiplicateur clic</Label>
-              <Input
-                id="color-multiplier"
-                type="number"
-                step={0.01}
-                min={0}
-                value={formState.clickMultiplier ?? ""}
-                onChange={(e) =>
-                  setFormState((f) => ({
-                    ...f,
-                    clickMultiplier: parseFloat(e.target.value) || 0,
-                  }))
-                }
-              />
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="color-multiplier">Multiplicateur clic</Label>
+          <Input
+            id="color-multiplier"
+            type="number"
+            step={0.01}
+            min={0}
+            value={formState.clickMultiplier ?? ""}
+            onChange={(e) =>
+              setFormState((f) => ({
+                ...f,
+                clickMultiplier: parseFloat(e.target.value) || 0,
+              }))
+            }
+          />
+        </div>
 
-            <div className="flex items-center gap-3">
-              <Switch
-                id="color-active"
-                checked={formState.active}
-                onCheckedChange={(checked) =>
-                  setFormState((f) => ({ ...f, active: !!checked }))
-                }
-              />
-              <Label htmlFor="color-active">Actif</Label>
-            </div>
-          </ConfigForm>
-        </DialogContent>
-      </Dialog>
+        <div className="flex items-center gap-3">
+          <Switch
+            id="color-active"
+            checked={formState.active}
+            onCheckedChange={(checked) =>
+              setFormState((f) => ({ ...f, active: !!checked }))
+            }
+          />
+          <Label htmlFor="color-active">Actif</Label>
+        </div>
+      </ConfigDialog>
 
       <DeleteConfirmDialog
         open={!!deleteId}

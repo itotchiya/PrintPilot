@@ -2,18 +2,13 @@
 
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2 } from "lucide-react";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfigDialog } from "@/components/admin/ConfigDialog";
 import {
   Select,
   SelectContent,
@@ -27,7 +22,6 @@ import {
   ConfigDataTable,
   type ColumnDef,
 } from "@/components/admin/ConfigDataTable";
-import { ConfigForm } from "@/components/admin/ConfigForm";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { useConfigData } from "@/hooks/useConfigData";
@@ -79,6 +73,12 @@ const EMPTY_GRAMMAGE: Omit<PaperGrammage, "id" | "paperTypeId"> = {
   active: true,
 };
 
+function toNum(v: unknown): number {
+  if (typeof v === "number" && !Number.isNaN(v)) return v;
+  const n = parseFloat(String(v ?? "0"));
+  return Number.isNaN(n) ? 0 : n;
+}
+
 export default function PaperConfigPage() {
   const { data, isLoading, refetch, create, update, remove } =
     useConfigData<PaperType>("paper");
@@ -106,6 +106,9 @@ export default function PaperConfigPage() {
     paperTypeId: string;
   } | null>(null);
   const [isDeletingGrammage, setIsDeletingGrammage] = useState(false);
+
+  // Active tab (for view action: switch to paper type's grammages)
+  const [activeTab, setActiveTab] = useState("types");
 
   // --- Paper Type handlers ---
 
@@ -251,9 +254,17 @@ export default function PaperConfigPage() {
     {
       key: "actions",
       header: "",
-      className: "w-[100px]",
+      className: "w-[130px]",
       cell: (item) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setActiveTab(item.id)}
+            title="Voir les grammages"
+          >
+            <Eye className="size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -278,14 +289,14 @@ export default function PaperConfigPage() {
     {
       key: "pricePerKg",
       header: "Prix/kg (€)",
-      cell: (item) => `${item.pricePerKg.toFixed(3)} €`,
+      cell: (item) => `${toNum(item.pricePerKg).toFixed(3)} €`,
     },
     {
       key: "weightPer1000Sheets",
       header: "Poids/1000 feuilles (kg)",
       cell: (item) =>
         item.weightPer1000Sheets != null
-          ? `${item.weightPer1000Sheets.toFixed(2)} kg`
+          ? `${toNum(item.weightPer1000Sheets).toFixed(2)} kg`
           : "—",
     },
     {
@@ -327,7 +338,7 @@ export default function PaperConfigPage() {
         description="Types de papier, grammages et prix au kg"
       />
 
-      <Tabs defaultValue="types">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="types">Types de papier</TabsTrigger>
           {(data as PaperType[]).map((pt) => (
@@ -365,160 +376,146 @@ export default function PaperConfigPage() {
       </Tabs>
 
       {/* Paper type add/edit dialog */}
-      <Dialog open={paperDialogOpen} onOpenChange={setPaperDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingPaper ? "Modifier le type de papier" : "Ajouter un type de papier"}
-            </DialogTitle>
-          </DialogHeader>
-          <ConfigForm
-            title={editingPaper ? "Modifier" : "Nouveau type"}
-            onSubmit={handlePaperSubmit}
-            onCancel={() => setPaperDialogOpen(false)}
-            isSubmitting={isSubmittingPaper}
+      <ConfigDialog
+        open={paperDialogOpen}
+        onOpenChange={setPaperDialogOpen}
+        title={editingPaper ? "Modifier le type de papier" : "Ajouter un type de papier"}
+        onSubmit={handlePaperSubmit}
+        onCancel={() => setPaperDialogOpen(false)}
+        isSubmitting={isSubmittingPaper}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="paper-name">Nom</Label>
+          <Input
+            id="paper-name"
+            value={paperForm.name}
+            onChange={(e) =>
+              setPaperForm((f) => ({ ...f, name: e.target.value }))
+            }
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="paper-category">Catégorie</Label>
+          <Select
+            value={paperForm.category}
+            onValueChange={(v) =>
+              setPaperForm((f) => ({
+                ...f,
+                category: v as PaperType["category"],
+              }))
+            }
           >
-            <div className="space-y-2">
-              <Label htmlFor="paper-name">Nom</Label>
-              <Input
-                id="paper-name"
-                value={paperForm.name}
-                onChange={(e) =>
-                  setPaperForm((f) => ({ ...f, name: e.target.value }))
-                }
-                required
-              />
-            </div>
+            <SelectTrigger id="paper-category" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="INTERIOR">Intérieur</SelectItem>
+              <SelectItem value="COVER">Couverture</SelectItem>
+              <SelectItem value="BOTH">Les deux</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="paper-category">Catégorie</Label>
-              <Select
-                value={paperForm.category}
-                onValueChange={(v) =>
-                  setPaperForm((f) => ({
-                    ...f,
-                    category: v as PaperType["category"],
-                  }))
-                }
-              >
-                <SelectTrigger id="paper-category" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="INTERIOR">Intérieur</SelectItem>
-                  <SelectItem value="COVER">Couverture</SelectItem>
-                  <SelectItem value="BOTH">Les deux</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="paper-sort">Ordre de tri</Label>
+          <Input
+            id="paper-sort"
+            type="number"
+            value={paperForm.sortOrder}
+            onChange={(e) =>
+              setPaperForm((f) => ({
+                ...f,
+                sortOrder: parseInt(e.target.value) || 0,
+              }))
+            }
+          />
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="paper-sort">Ordre de tri</Label>
-              <Input
-                id="paper-sort"
-                type="number"
-                value={paperForm.sortOrder}
-                onChange={(e) =>
-                  setPaperForm((f) => ({
-                    ...f,
-                    sortOrder: parseInt(e.target.value) || 0,
-                  }))
-                }
-              />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Switch
-                id="paper-active"
-                checked={paperForm.active}
-                onCheckedChange={(checked) =>
-                  setPaperForm((f) => ({ ...f, active: checked }))
-                }
-              />
-              <Label htmlFor="paper-active">Actif</Label>
-            </div>
-          </ConfigForm>
-        </DialogContent>
-      </Dialog>
+        <div className="flex items-center gap-3">
+          <Switch
+            id="paper-active"
+            checked={paperForm.active}
+            onCheckedChange={(checked) =>
+              setPaperForm((f) => ({ ...f, active: checked }))
+            }
+          />
+          <Label htmlFor="paper-active">Actif</Label>
+        </div>
+      </ConfigDialog>
 
       {/* Grammage add/edit dialog */}
-      <Dialog open={grammageDialogOpen} onOpenChange={setGrammageDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingGrammage ? "Modifier le grammage" : "Ajouter un grammage"}
-            </DialogTitle>
-          </DialogHeader>
-          <ConfigForm
-            title={editingGrammage ? "Modifier" : "Nouveau grammage"}
-            onSubmit={handleGrammageSubmit}
-            onCancel={() => setGrammageDialogOpen(false)}
-            isSubmitting={isSubmittingGrammage}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="gram-value">Grammage (g/m²)</Label>
-              <Input
-                id="gram-value"
-                type="number"
-                value={grammageForm.grammage || ""}
-                onChange={(e) =>
-                  setGrammageForm((f) => ({
-                    ...f,
-                    grammage: parseFloat(e.target.value) || 0,
-                  }))
-                }
-                required
-              />
-            </div>
+      <ConfigDialog
+        open={grammageDialogOpen}
+        onOpenChange={setGrammageDialogOpen}
+        title={editingGrammage ? "Modifier le grammage" : "Ajouter un grammage"}
+        onSubmit={handleGrammageSubmit}
+        onCancel={() => setGrammageDialogOpen(false)}
+        isSubmitting={isSubmittingGrammage}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="gram-value">Grammage (g/m²)</Label>
+          <Input
+            id="gram-value"
+            type="number"
+            value={grammageForm.grammage || ""}
+            onChange={(e) =>
+              setGrammageForm((f) => ({
+                ...f,
+                grammage: parseFloat(e.target.value) || 0,
+              }))
+            }
+            required
+          />
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="gram-price">Prix par kg (€)</Label>
-              <Input
-                id="gram-price"
-                type="number"
-                step="0.001"
-                value={grammageForm.pricePerKg || ""}
-                onChange={(e) =>
-                  setGrammageForm((f) => ({
-                    ...f,
-                    pricePerKg: parseFloat(e.target.value) || 0,
-                  }))
-                }
-                required
-              />
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="gram-price">Prix par kg (€)</Label>
+          <Input
+            id="gram-price"
+            type="number"
+            step="0.001"
+            value={grammageForm.pricePerKg || ""}
+            onChange={(e) =>
+              setGrammageForm((f) => ({
+                ...f,
+                pricePerKg: parseFloat(e.target.value) || 0,
+              }))
+            }
+            required
+          />
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="gram-weight">Poids / 1000 feuilles (kg)</Label>
-              <Input
-                id="gram-weight"
-                type="number"
-                step="0.01"
-                value={grammageForm.weightPer1000Sheets ?? ""}
-                onChange={(e) =>
-                  setGrammageForm((f) => ({
-                    ...f,
-                    weightPer1000Sheets: e.target.value
-                      ? parseFloat(e.target.value)
-                      : null,
-                  }))
-                }
-              />
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="gram-weight">Poids / 1000 feuilles (kg)</Label>
+          <Input
+            id="gram-weight"
+            type="number"
+            step="0.01"
+            value={grammageForm.weightPer1000Sheets ?? ""}
+            onChange={(e) =>
+              setGrammageForm((f) => ({
+                ...f,
+                weightPer1000Sheets: e.target.value
+                  ? parseFloat(e.target.value)
+                  : null,
+              }))
+            }
+          />
+        </div>
 
-            <div className="flex items-center gap-3">
-              <Switch
-                id="gram-active"
-                checked={grammageForm.active}
-                onCheckedChange={(checked) =>
-                  setGrammageForm((f) => ({ ...f, active: checked }))
-                }
-              />
-              <Label htmlFor="gram-active">Actif</Label>
-            </div>
-          </ConfigForm>
-        </DialogContent>
-      </Dialog>
+        <div className="flex items-center gap-3">
+          <Switch
+            id="gram-active"
+            checked={grammageForm.active}
+            onCheckedChange={(checked) =>
+              setGrammageForm((f) => ({ ...f, active: checked }))
+            }
+          />
+          <Label htmlFor="gram-active">Actif</Label>
+        </div>
+      </ConfigDialog>
 
       {/* Paper delete confirmation */}
       <DeleteConfirmDialog

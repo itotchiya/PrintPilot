@@ -2,18 +2,12 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2 } from "lucide-react";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { ConfigDialog } from "@/components/admin/ConfigDialog";
 import {
   Tabs,
   TabsList,
@@ -60,6 +54,12 @@ const emptyTier: Omit<LaminationPriceTier, "id" | "finishId"> = {
   setupCost: 0,
 };
 
+function toNum(v: unknown): number {
+  if (typeof v === "number" && !Number.isNaN(v)) return v;
+  const n = parseFloat(String(v ?? "0"));
+  return Number.isNaN(n) ? 0 : n;
+}
+
 export default function LaminationConfigPage() {
   const { data: finishes, isLoading, refetch, create, update, remove } =
     useConfigData<LaminationFinish>("lamination");
@@ -83,6 +83,8 @@ export default function LaminationConfigPage() {
     finishId: string;
   } | null>(null);
   const [isTierDeleting, setIsTierDeleting] = useState(false);
+
+  const [activeTab, setActiveTab] = useState("finishes");
 
   // --- Finish CRUD ---
 
@@ -213,17 +215,17 @@ export default function LaminationConfigPage() {
       {
         key: "offsetPricePerM2",
         header: "Prix/m\u00b2 offset \u20ac",
-        cell: (f) => f.offsetPricePerM2.toFixed(2),
+        cell: (f) => toNum(f.offsetPricePerM2).toFixed(2),
       },
       {
         key: "offsetCalageForfait",
         header: "Calage \u20ac",
-        cell: (f) => f.offsetCalageForfait.toFixed(2),
+        cell: (f) => toNum(f.offsetCalageForfait).toFixed(2),
       },
       {
         key: "offsetMinimumBilling",
         header: "Minimum facturation \u20ac",
-        cell: (f) => f.offsetMinimumBilling.toFixed(2),
+        cell: (f) => toNum(f.offsetMinimumBilling).toFixed(2),
       },
       {
         key: "digitalPriceTiers",
@@ -241,6 +243,14 @@ export default function LaminationConfigPage() {
         className: "w-[100px]",
         cell: (f) => (
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setActiveTab(f.id)}
+              title="Voir"
+            >
+              <Eye className="size-4" />
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => openEditFinish(f)}>
               <Pencil className="size-4" />
             </Button>
@@ -265,12 +275,12 @@ export default function LaminationConfigPage() {
       {
         key: "pricePerSheet",
         header: "Prix/feuille \u20ac",
-        cell: (t) => t.pricePerSheet.toFixed(3),
+        cell: (t) => toNum(t.pricePerSheet).toFixed(3),
       },
       {
         key: "setupCost",
         header: "Mise en route \u20ac",
-        cell: (t) => t.setupCost.toFixed(2),
+        cell: (t) => toNum(t.setupCost).toFixed(2),
       },
       {
         key: "actions",
@@ -306,7 +316,7 @@ export default function LaminationConfigPage() {
         description="Finitions de pelliculage et tarifs"
       />
 
-      <Tabs defaultValue="finishes">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="finishes">Finitions</TabsTrigger>
           {finishes.map((f) => (
@@ -349,207 +359,171 @@ export default function LaminationConfigPage() {
       </Tabs>
 
       {/* Finish dialog */}
-      <Dialog open={finishDialogOpen} onOpenChange={setFinishDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingFinish ? "Modifier la finition" : "Nouvelle finition"}
-            </DialogTitle>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleFinishSubmit();
-            }}
-            className="space-y-4"
-          >
-            <div className="space-y-2">
-              <Label htmlFor="finish-name">Nom</Label>
-              <Input
-                id="finish-name"
-                value={finishForm.name}
-                onChange={(e) =>
-                  setFinishForm((p) => ({ ...p, name: e.target.value }))
-                }
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="finish-price">Prix/m² offset (€)</Label>
-                <Input
-                  id="finish-price"
-                  type="number"
-                  step={0.01}
-                  value={finishForm.offsetPricePerM2}
-                  onChange={(e) =>
-                    setFinishForm((p) => ({
-                      ...p,
-                      offsetPricePerM2: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="finish-calage">Calage (€)</Label>
-                <Input
-                  id="finish-calage"
-                  type="number"
-                  step={0.01}
-                  value={finishForm.offsetCalageForfait}
-                  onChange={(e) =>
-                    setFinishForm((p) => ({
-                      ...p,
-                      offsetCalageForfait: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="finish-min-billing">
-                Minimum facturation (€)
-              </Label>
-              <Input
-                id="finish-min-billing"
-                type="number"
-                step={0.01}
-                value={finishForm.offsetMinimumBilling}
-                onChange={(e) =>
-                  setFinishForm((p) => ({
-                    ...p,
-                    offsetMinimumBilling: parseFloat(e.target.value) || 0,
-                  }))
-                }
-                required
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch
-                id="finish-active"
-                checked={finishForm.active}
-                onCheckedChange={(v) =>
-                  setFinishForm((p) => ({ ...p, active: v }))
-                }
-              />
-              <Label htmlFor="finish-active">Actif</Label>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setFinishDialogOpen(false)}
-                disabled={isSubmitting}
-              >
-                Annuler
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Enregistrement\u2026" : "Enregistrer"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <ConfigDialog
+        open={finishDialogOpen}
+        onOpenChange={setFinishDialogOpen}
+        title={editingFinish ? "Modifier la finition" : "Nouvelle finition"}
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleFinishSubmit();
+        }}
+        onCancel={() => setFinishDialogOpen(false)}
+        isSubmitting={isSubmitting}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="finish-name">Nom</Label>
+          <Input
+            id="finish-name"
+            value={finishForm.name}
+            onChange={(e) =>
+              setFinishForm((p) => ({ ...p, name: e.target.value }))
+            }
+            required
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="finish-price">Prix/m² offset (€)</Label>
+            <Input
+              id="finish-price"
+              type="number"
+              step={0.01}
+              value={finishForm.offsetPricePerM2}
+              onChange={(e) =>
+                setFinishForm((p) => ({
+                  ...p,
+                  offsetPricePerM2: parseFloat(e.target.value) || 0,
+                }))
+              }
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="finish-calage">Calage (€)</Label>
+            <Input
+              id="finish-calage"
+              type="number"
+              step={0.01}
+              value={finishForm.offsetCalageForfait}
+              onChange={(e) =>
+                setFinishForm((p) => ({
+                  ...p,
+                  offsetCalageForfait: parseFloat(e.target.value) || 0,
+                }))
+              }
+              required
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="finish-min-billing">
+            Minimum facturation (€)
+          </Label>
+          <Input
+            id="finish-min-billing"
+            type="number"
+            step={0.01}
+            value={finishForm.offsetMinimumBilling}
+            onChange={(e) =>
+              setFinishForm((p) => ({
+                ...p,
+                offsetMinimumBilling: parseFloat(e.target.value) || 0,
+              }))
+            }
+            required
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <Switch
+            id="finish-active"
+            checked={finishForm.active}
+            onCheckedChange={(v) =>
+              setFinishForm((p) => ({ ...p, active: v }))
+            }
+          />
+          <Label htmlFor="finish-active">Actif</Label>
+        </div>
+      </ConfigDialog>
 
       {/* Tier dialog */}
-      <Dialog open={tierDialogOpen} onOpenChange={setTierDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingTier ? "Modifier le palier" : "Nouveau palier"}
-            </DialogTitle>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleTierSubmit();
-            }}
-            className="space-y-4"
-          >
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="tier-qty-min">Quantité min</Label>
-                <Input
-                  id="tier-qty-min"
-                  type="number"
-                  value={tierForm.qtyMin}
-                  onChange={(e) =>
-                    setTierForm((p) => ({
-                      ...p,
-                      qtyMin: parseInt(e.target.value) || 0,
-                    }))
-                  }
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tier-qty-max">Quantité max</Label>
-                <Input
-                  id="tier-qty-max"
-                  type="number"
-                  value={tierForm.qtyMax}
-                  onChange={(e) =>
-                    setTierForm((p) => ({
-                      ...p,
-                      qtyMax: parseInt(e.target.value) || 0,
-                    }))
-                  }
-                  required
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="tier-price">Prix/feuille (€)</Label>
-                <Input
-                  id="tier-price"
-                  type="number"
-                  step={0.001}
-                  value={tierForm.pricePerSheet}
-                  onChange={(e) =>
-                    setTierForm((p) => ({
-                      ...p,
-                      pricePerSheet: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tier-setup">Mise en route (€)</Label>
-                <Input
-                  id="tier-setup"
-                  type="number"
-                  step={0.01}
-                  value={tierForm.setupCost}
-                  onChange={(e) =>
-                    setTierForm((p) => ({
-                      ...p,
-                      setupCost: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                  required
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setTierDialogOpen(false)}
-                disabled={isTierSubmitting}
-              >
-                Annuler
-              </Button>
-              <Button type="submit" disabled={isTierSubmitting}>
-                {isTierSubmitting ? "Enregistrement\u2026" : "Enregistrer"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <ConfigDialog
+        open={tierDialogOpen}
+        onOpenChange={setTierDialogOpen}
+        title={editingTier ? "Modifier le palier" : "Nouveau palier"}
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleTierSubmit();
+        }}
+        onCancel={() => setTierDialogOpen(false)}
+        isSubmitting={isTierSubmitting}
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="tier-qty-min">Quantité min</Label>
+            <Input
+              id="tier-qty-min"
+              type="number"
+              value={tierForm.qtyMin}
+              onChange={(e) =>
+                setTierForm((p) => ({
+                  ...p,
+                  qtyMin: parseInt(e.target.value) || 0,
+                }))
+              }
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tier-qty-max">Quantité max</Label>
+            <Input
+              id="tier-qty-max"
+              type="number"
+              value={tierForm.qtyMax}
+              onChange={(e) =>
+                setTierForm((p) => ({
+                  ...p,
+                  qtyMax: parseInt(e.target.value) || 0,
+                }))
+              }
+              required
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="tier-price">Prix/feuille (€)</Label>
+            <Input
+              id="tier-price"
+              type="number"
+              step={0.001}
+              value={tierForm.pricePerSheet}
+              onChange={(e) =>
+                setTierForm((p) => ({
+                  ...p,
+                  pricePerSheet: parseFloat(e.target.value) || 0,
+                }))
+              }
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="tier-setup">Mise en route (€)</Label>
+            <Input
+              id="tier-setup"
+              type="number"
+              step={0.01}
+              value={tierForm.setupCost}
+              onChange={(e) =>
+                setTierForm((p) => ({
+                  ...p,
+                  setupCost: parseFloat(e.target.value) || 0,
+                }))
+              }
+              required
+            />
+          </div>
+        </div>
+      </ConfigDialog>
 
       {/* Delete dialogs */}
       <DeleteConfirmDialog

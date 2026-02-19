@@ -2,24 +2,18 @@
 
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfigDialog } from "@/components/admin/ConfigDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConfigPageHeader } from "@/components/admin/ConfigPageHeader";
 import {
   ConfigDataTable,
   type ColumnDef,
 } from "@/components/admin/ConfigDataTable";
-import { ConfigForm } from "@/components/admin/ConfigForm";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { useConfigData } from "@/hooks/useConfigData";
@@ -95,6 +89,8 @@ export default function FinishingConfigPage() {
     bindingTypeId: string;
   } | null>(null);
   const [isDeletingTier, setIsDeletingTier] = useState(false);
+
+  const [activeTab, setActiveTab] = useState("types");
 
   const openAddBinding = () => {
     setEditingBinding(null);
@@ -244,9 +240,17 @@ export default function FinishingConfigPage() {
     {
       key: "actions",
       header: "",
-      className: "w-[130px]",
+      className: "w-[160px]",
       cell: (item) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setActiveTab(item.id)}
+            title="Voir les tarifs"
+          >
+            <Eye className="size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -331,7 +335,7 @@ export default function FinishingConfigPage() {
         description="Types de reliure et tarifs associés"
       />
 
-      <Tabs defaultValue="types">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="types">Types de reliure</TabsTrigger>
           {bindings
@@ -371,202 +375,190 @@ export default function FinishingConfigPage() {
       </Tabs>
 
       {/* Binding type add/edit dialog */}
-      <Dialog open={bindingDialogOpen} onOpenChange={setBindingDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingBinding
-                ? "Modifier le type de reliure"
-                : "Ajouter un type de reliure"}
-            </DialogTitle>
-          </DialogHeader>
-          <ConfigForm
-            title={editingBinding ? "Modifier" : "Nouveau type"}
-            onSubmit={handleBindingSubmit}
-            onCancel={() => setBindingDialogOpen(false)}
-            isSubmitting={isSubmittingBinding}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="binding-name">Nom</Label>
-              <Input
-                id="binding-name"
-                value={bindingForm.name}
-                onChange={(e) =>
-                  setBindingForm((f) => ({ ...f, name: e.target.value }))
-                }
-                required
-              />
-            </div>
+      <ConfigDialog
+        open={bindingDialogOpen}
+        onOpenChange={setBindingDialogOpen}
+        title={
+          editingBinding
+            ? "Modifier le type de reliure"
+            : "Ajouter un type de reliure"
+        }
+        onSubmit={handleBindingSubmit}
+        onCancel={() => setBindingDialogOpen(false)}
+        isSubmitting={isSubmittingBinding}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="binding-name">Nom</Label>
+          <Input
+            id="binding-name"
+            value={bindingForm.name}
+            onChange={(e) =>
+              setBindingForm((f) => ({ ...f, name: e.target.value }))
+            }
+            required
+          />
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="binding-minPages">Pages min</Label>
-              <Input
-                id="binding-minPages"
-                type="number"
-                min={0}
-                value={bindingForm.minPages || ""}
-                onChange={(e) =>
-                  setBindingForm((f) => ({
-                    ...f,
-                    minPages: parseInt(e.target.value) || 0,
-                  }))
-                }
-                required
-              />
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="binding-minPages">Pages min</Label>
+          <Input
+            id="binding-minPages"
+            type="number"
+            min={0}
+            value={bindingForm.minPages || ""}
+            onChange={(e) =>
+              setBindingForm((f) => ({
+                ...f,
+                minPages: parseInt(e.target.value) || 0,
+              }))
+            }
+            required
+          />
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="binding-maxPages">Pages max (optionnel, vide = ∞)</Label>
-              <Input
-                id="binding-maxPages"
-                type="number"
-                min={0}
-                value={bindingForm.maxPages ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setBindingForm((f) => ({
-                    ...f,
-                    maxPages: v === "" ? null : (parseInt(v) || 0),
-                  }));
-                }}
-                placeholder="∞"
-              />
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="binding-maxPages">Pages max (optionnel, vide = ∞)</Label>
+          <Input
+            id="binding-maxPages"
+            type="number"
+            min={0}
+            value={bindingForm.maxPages ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setBindingForm((f) => ({
+                ...f,
+                maxPages: v === "" ? null : (parseInt(v) || 0),
+              }));
+            }}
+            placeholder="∞"
+          />
+        </div>
 
-            <div className="flex items-center gap-3">
-              <Switch
-                id="binding-active"
-                checked={bindingForm.active}
-                onCheckedChange={(checked) =>
-                  setBindingForm((f) => ({ ...f, active: checked }))
-                }
-              />
-              <Label htmlFor="binding-active">Actif</Label>
-            </div>
-          </ConfigForm>
-        </DialogContent>
-      </Dialog>
+        <div className="flex items-center gap-3">
+          <Switch
+            id="binding-active"
+            checked={bindingForm.active}
+            onCheckedChange={(checked) =>
+              setBindingForm((f) => ({ ...f, active: checked }))
+            }
+          />
+          <Label htmlFor="binding-active">Actif</Label>
+        </div>
+      </ConfigDialog>
 
       {/* Tier add/edit dialog */}
-      <Dialog open={tierDialogOpen} onOpenChange={setTierDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingTier ? "Modifier le tarif" : "Ajouter un tarif"}
-            </DialogTitle>
-          </DialogHeader>
-          <ConfigForm
-            title={editingTier ? "Modifier" : "Nouveau tarif"}
-            onSubmit={handleTierSubmit}
-            onCancel={() => setTierDialogOpen(false)}
-            isSubmitting={isSubmittingTier}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="tier-pageMin">Pages min</Label>
-              <Input
-                id="tier-pageMin"
-                type="number"
-                min={0}
-                value={tierForm.pageRangeMin || ""}
-                onChange={(e) =>
-                  setTierForm((f) => ({
-                    ...f,
-                    pageRangeMin: parseInt(e.target.value) || 0,
-                  }))
-                }
-                required
-              />
-            </div>
+      <ConfigDialog
+        open={tierDialogOpen}
+        onOpenChange={setTierDialogOpen}
+        title={editingTier ? "Modifier le tarif" : "Ajouter un tarif"}
+        onSubmit={handleTierSubmit}
+        onCancel={() => setTierDialogOpen(false)}
+        isSubmitting={isSubmittingTier}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="tier-pageMin">Pages min</Label>
+          <Input
+            id="tier-pageMin"
+            type="number"
+            min={0}
+            value={tierForm.pageRangeMin || ""}
+            onChange={(e) =>
+              setTierForm((f) => ({
+                ...f,
+                pageRangeMin: parseInt(e.target.value) || 0,
+              }))
+            }
+            required
+          />
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="tier-pageMax">Pages max</Label>
-              <Input
-                id="tier-pageMax"
-                type="number"
-                min={0}
-                value={tierForm.pageRangeMax || ""}
-                onChange={(e) =>
-                  setTierForm((f) => ({
-                    ...f,
-                    pageRangeMax: parseInt(e.target.value) || 0,
-                  }))
-                }
-                required
-              />
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="tier-pageMax">Pages max</Label>
+          <Input
+            id="tier-pageMax"
+            type="number"
+            min={0}
+            value={tierForm.pageRangeMax || ""}
+            onChange={(e) =>
+              setTierForm((f) => ({
+                ...f,
+                pageRangeMax: parseInt(e.target.value) || 0,
+              }))
+            }
+            required
+          />
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="tier-qtyMin">Quantité min</Label>
-              <Input
-                id="tier-qtyMin"
-                type="number"
-                min={0}
-                value={tierForm.qtyMin || ""}
-                onChange={(e) =>
-                  setTierForm((f) => ({
-                    ...f,
-                    qtyMin: parseInt(e.target.value) || 0,
-                  }))
-                }
-                required
-              />
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="tier-qtyMin">Quantité min</Label>
+          <Input
+            id="tier-qtyMin"
+            type="number"
+            min={0}
+            value={tierForm.qtyMin || ""}
+            onChange={(e) =>
+              setTierForm((f) => ({
+                ...f,
+                qtyMin: parseInt(e.target.value) || 0,
+              }))
+            }
+            required
+          />
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="tier-qtyMax">Quantité max</Label>
-              <Input
-                id="tier-qtyMax"
-                type="number"
-                min={0}
-                value={tierForm.qtyMax || ""}
-                onChange={(e) =>
-                  setTierForm((f) => ({
-                    ...f,
-                    qtyMax: parseInt(e.target.value) || 0,
-                  }))
-                }
-                required
-              />
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="tier-qtyMax">Quantité max</Label>
+          <Input
+            id="tier-qtyMax"
+            type="number"
+            min={0}
+            value={tierForm.qtyMax || ""}
+            onChange={(e) =>
+              setTierForm((f) => ({
+                ...f,
+                qtyMax: parseInt(e.target.value) || 0,
+              }))
+            }
+            required
+          />
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="tier-perUnit">Coût/unité (€)</Label>
-              <Input
-                id="tier-perUnit"
-                type="number"
-                step={0.01}
-                min={0}
-                value={tierForm.perUnitCost || ""}
-                onChange={(e) =>
-                  setTierForm((f) => ({
-                    ...f,
-                    perUnitCost: parseFloat(e.target.value) || 0,
-                  }))
-                }
-                required
-              />
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="tier-perUnit">Coût/unité (€)</Label>
+          <Input
+            id="tier-perUnit"
+            type="number"
+            step={0.01}
+            min={0}
+            value={tierForm.perUnitCost || ""}
+            onChange={(e) =>
+              setTierForm((f) => ({
+                ...f,
+                perUnitCost: parseFloat(e.target.value) || 0,
+              }))
+            }
+            required
+          />
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="tier-setup">Mise en route (€)</Label>
-              <Input
-                id="tier-setup"
-                type="number"
-                step={0.01}
-                min={0}
-                value={tierForm.setupCost || ""}
-                onChange={(e) =>
-                  setTierForm((f) => ({
-                    ...f,
-                    setupCost: parseFloat(e.target.value) || 0,
-                  }))
-                }
-                required
-              />
-            </div>
-          </ConfigForm>
-        </DialogContent>
-      </Dialog>
+        <div className="space-y-2">
+          <Label htmlFor="tier-setup">Mise en route (€)</Label>
+          <Input
+            id="tier-setup"
+            type="number"
+            step={0.01}
+            min={0}
+            value={tierForm.setupCost || ""}
+            onChange={(e) =>
+              setTierForm((f) => ({
+                ...f,
+                setupCost: parseFloat(e.target.value) || 0,
+              }))
+            }
+            required
+          />
+        </div>
+      </ConfigDialog>
 
       <DeleteConfirmDialog
         open={!!deletingBinding}

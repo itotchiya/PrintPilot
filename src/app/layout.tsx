@@ -30,7 +30,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr" suppressHydrationWarning>
-      <body className={`${dmSans.variable} ${dmMono.variable} antialiased`}>
+      <body
+        className={`${dmSans.variable} ${dmMono.variable} antialiased`}
+        suppressHydrationWarning
+      >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <SessionProvider>
             {children}

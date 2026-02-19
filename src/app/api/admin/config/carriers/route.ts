@@ -23,3 +23,40 @@ export async function POST(request: NextRequest) {
     return errorResponse(error);
   }
 }
+
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, ...data } = body;
+    if (!id) {
+      return NextResponse.json(
+        { error: "Le champ 'id' est requis" },
+        { status: 400 }
+      );
+    }
+    const carrier = await prisma.carrier.update({
+      where: { id },
+      data,
+    });
+    return NextResponse.json(carrier);
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+  if (!id) {
+    return NextResponse.json(
+      { error: "Paramètre id requis" },
+      { status: 400 }
+    );
+  }
+  try {
+    await prisma.carrier.delete({ where: { id } });
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}

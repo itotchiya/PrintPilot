@@ -2,19 +2,13 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2 } from "lucide-react";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { ConfigDialog } from "@/components/admin/ConfigDialog";
 import {
   Tabs,
   TabsList,
@@ -69,6 +63,12 @@ const emptyDept: DeptFormData = {
 const emptyCarrier: CarrierFormData = { name: "", active: true };
 
 const emptyRate: RateFormData = { zone: 1, maxWeightKg: 0, price: 0 };
+
+function toNum(v: unknown): number {
+  if (typeof v === "number" && !Number.isNaN(v)) return v;
+  const n = parseFloat(String(v ?? "0"));
+  return Number.isNaN(n) ? 0 : n;
+}
 
 export default function DeliveryConfigPage() {
   // --- Departments (via useConfigData) ---
@@ -401,9 +401,17 @@ export default function DeliveryConfigPage() {
       {
         key: "actions",
         header: "",
-        className: "w-[100px]",
+        className: "w-[130px]",
         cell: (c) => (
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleTabChange(c.id)}
+              title="Voir les tarifs"
+            >
+              <Eye className="size-4" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -422,7 +430,7 @@ export default function DeliveryConfigPage() {
         ),
       },
     ],
-    [openEditCarrier],
+    [openEditCarrier, handleTabChange],
   );
 
   const buildRateColumns = useCallback(
@@ -442,7 +450,7 @@ export default function DeliveryConfigPage() {
       {
         key: "price",
         header: "Prix €",
-        cell: (r) => r.price.toFixed(2),
+        cell: (r) => toNum(r.price).toFixed(2),
       },
       {
         key: "actions",
@@ -549,228 +557,176 @@ export default function DeliveryConfigPage() {
       </Tabs>
 
       {/* Department dialog */}
-      <Dialog open={deptDialogOpen} onOpenChange={setDeptDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingDept
-                ? "Modifier le département"
-                : "Nouveau département"}
-            </DialogTitle>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleDeptSubmit();
-            }}
-            className="space-y-4"
-          >
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="dept-code">Code</Label>
-                <Input
-                  id="dept-code"
-                  value={deptForm.code}
-                  onChange={(e) =>
-                    setDeptForm((p) => ({ ...p, code: e.target.value }))
-                  }
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dept-name">Nom</Label>
-                <Input
-                  id="dept-name"
-                  value={deptForm.name}
-                  onChange={(e) =>
-                    setDeptForm((p) => ({ ...p, name: e.target.value }))
-                  }
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="dept-zone">Zone</Label>
-              <Input
-                id="dept-zone"
-                type="number"
-                min={1}
-                max={5}
-                value={deptForm.zone}
-                onChange={(e) =>
-                  setDeptForm((p) => ({
-                    ...p,
-                    zone: parseInt(e.target.value) || 1,
-                  }))
-                }
-                required
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch
-                id="dept-special"
-                checked={deptForm.isSpecialZone}
-                onCheckedChange={(v) =>
-                  setDeptForm((p) => ({ ...p, isSpecialZone: v }))
-                }
-              />
-              <Label htmlFor="dept-special">Zone spéciale</Label>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDeptDialogOpen(false)}
-                disabled={isDeptSubmitting}
-              >
-                Annuler
-              </Button>
-              <Button type="submit" disabled={isDeptSubmitting}>
-                {isDeptSubmitting ? "Enregistrement…" : "Enregistrer"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <ConfigDialog
+        open={deptDialogOpen}
+        onOpenChange={setDeptDialogOpen}
+        title={
+          editingDept
+            ? "Modifier le département"
+            : "Nouveau département"
+        }
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleDeptSubmit();
+        }}
+        onCancel={() => setDeptDialogOpen(false)}
+        isSubmitting={isDeptSubmitting}
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="dept-code">Code</Label>
+            <Input
+              id="dept-code"
+              value={deptForm.code}
+              onChange={(e) =>
+                setDeptForm((p) => ({ ...p, code: e.target.value }))
+              }
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="dept-name">Nom</Label>
+            <Input
+              id="dept-name"
+              value={deptForm.name}
+              onChange={(e) =>
+                setDeptForm((p) => ({ ...p, name: e.target.value }))
+              }
+              required
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="dept-zone">Zone</Label>
+          <Input
+            id="dept-zone"
+            type="number"
+            min={1}
+            max={5}
+            value={deptForm.zone}
+            onChange={(e) =>
+              setDeptForm((p) => ({
+                ...p,
+                zone: parseInt(e.target.value) || 1,
+              }))
+            }
+            required
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <Switch
+            id="dept-special"
+            checked={deptForm.isSpecialZone}
+            onCheckedChange={(v) =>
+              setDeptForm((p) => ({ ...p, isSpecialZone: v }))
+            }
+          />
+          <Label htmlFor="dept-special">Zone spéciale</Label>
+        </div>
+      </ConfigDialog>
 
       {/* Carrier dialog */}
-      <Dialog open={carrierDialogOpen} onOpenChange={setCarrierDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingCarrier
-                ? "Modifier le transporteur"
-                : "Nouveau transporteur"}
-            </DialogTitle>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleCarrierSubmit();
-            }}
-            className="space-y-4"
-          >
-            <div className="space-y-2">
-              <Label htmlFor="carrier-name">Nom</Label>
-              <Input
-                id="carrier-name"
-                value={carrierForm.name}
-                onChange={(e) =>
-                  setCarrierForm((p) => ({ ...p, name: e.target.value }))
-                }
-                required
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch
-                id="carrier-active"
-                checked={carrierForm.active}
-                onCheckedChange={(v) =>
-                  setCarrierForm((p) => ({ ...p, active: v }))
-                }
-              />
-              <Label htmlFor="carrier-active">Actif</Label>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCarrierDialogOpen(false)}
-                disabled={isCarrierSubmitting}
-              >
-                Annuler
-              </Button>
-              <Button type="submit" disabled={isCarrierSubmitting}>
-                {isCarrierSubmitting
-                  ? "Enregistrement…"
-                  : "Enregistrer"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <ConfigDialog
+        open={carrierDialogOpen}
+        onOpenChange={setCarrierDialogOpen}
+        title={
+          editingCarrier
+            ? "Modifier le transporteur"
+            : "Nouveau transporteur"
+        }
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleCarrierSubmit();
+        }}
+        onCancel={() => setCarrierDialogOpen(false)}
+        isSubmitting={isCarrierSubmitting}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="carrier-name">Nom</Label>
+          <Input
+            id="carrier-name"
+            value={carrierForm.name}
+            onChange={(e) =>
+              setCarrierForm((p) => ({ ...p, name: e.target.value }))
+            }
+            required
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <Switch
+            id="carrier-active"
+            checked={carrierForm.active}
+            onCheckedChange={(v) =>
+              setCarrierForm((p) => ({ ...p, active: v }))
+            }
+          />
+          <Label htmlFor="carrier-active">Actif</Label>
+        </div>
+      </ConfigDialog>
 
       {/* Rate dialog */}
-      <Dialog open={rateDialogOpen} onOpenChange={setRateDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingRate ? "Modifier le tarif" : "Nouveau tarif"}
-            </DialogTitle>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleRateSubmit();
-            }}
-            className="space-y-4"
-          >
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="rate-zone">Zone</Label>
-                <Input
-                  id="rate-zone"
-                  type="number"
-                  min={1}
-                  max={5}
-                  value={rateForm.zone}
-                  onChange={(e) =>
-                    setRateForm((p) => ({
-                      ...p,
-                      zone: parseInt(e.target.value) || 1,
-                    }))
-                  }
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="rate-weight">Poids max (kg)</Label>
-                <Input
-                  id="rate-weight"
-                  type="number"
-                  value={rateForm.maxWeightKg}
-                  onChange={(e) =>
-                    setRateForm((p) => ({
-                      ...p,
-                      maxWeightKg: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="rate-price">Prix (€)</Label>
-              <Input
-                id="rate-price"
-                type="number"
-                step={0.01}
-                value={rateForm.price}
-                onChange={(e) =>
-                  setRateForm((p) => ({
-                    ...p,
-                    price: parseFloat(e.target.value) || 0,
-                  }))
-                }
-                required
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setRateDialogOpen(false)}
-                disabled={isRateSubmitting}
-              >
-                Annuler
-              </Button>
-              <Button type="submit" disabled={isRateSubmitting}>
-                {isRateSubmitting ? "Enregistrement…" : "Enregistrer"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <ConfigDialog
+        open={rateDialogOpen}
+        onOpenChange={setRateDialogOpen}
+        title={editingRate ? "Modifier le tarif" : "Nouveau tarif"}
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleRateSubmit();
+        }}
+        onCancel={() => setRateDialogOpen(false)}
+        isSubmitting={isRateSubmitting}
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="rate-zone">Zone</Label>
+            <Input
+              id="rate-zone"
+              type="number"
+              min={1}
+              max={5}
+              value={rateForm.zone}
+              onChange={(e) =>
+                setRateForm((p) => ({
+                  ...p,
+                  zone: parseInt(e.target.value) || 1,
+                }))
+              }
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="rate-weight">Poids max (kg)</Label>
+            <Input
+              id="rate-weight"
+              type="number"
+              value={rateForm.maxWeightKg}
+              onChange={(e) =>
+                setRateForm((p) => ({
+                  ...p,
+                  maxWeightKg: parseFloat(e.target.value) || 0,
+                }))
+              }
+              required
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="rate-price">Prix (€)</Label>
+          <Input
+            id="rate-price"
+            type="number"
+            step={0.01}
+            value={rateForm.price}
+            onChange={(e) =>
+              setRateForm((p) => ({
+                ...p,
+                price: parseFloat(e.target.value) || 0,
+              }))
+            }
+            required
+          />
+        </div>
+      </ConfigDialog>
 
       {/* Delete dialogs */}
       <DeleteConfirmDialog

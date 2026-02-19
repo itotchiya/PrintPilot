@@ -9,12 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfigDialog } from "@/components/admin/ConfigDialog";
 import {
   Select,
   SelectContent,
@@ -27,7 +22,6 @@ import {
   ConfigDataTable,
   type ColumnDef,
 } from "@/components/admin/ConfigDataTable";
-import { ConfigForm } from "@/components/admin/ConfigForm";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { useConfigData } from "@/hooks/useConfigData";
@@ -247,121 +241,114 @@ export default function PackagingConfigPage() {
         isLoading={isLoading}
       />
 
-      <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {editingId ? "Modifier l'option" : "Ajouter une option"}
-            </DialogTitle>
-          </DialogHeader>
-          <ConfigForm
-            title={editingId ? "Modifier" : "Nouvelle option de conditionnement"}
-            onSubmit={handleSubmit}
-            onCancel={() => setShowForm(false)}
-            isSubmitting={isSubmitting}
+      <ConfigDialog
+        open={showForm}
+        onOpenChange={setShowForm}
+        title={editingId ? "Modifier l'option" : "Ajouter une option"}
+        onSubmit={handleSubmit}
+        onCancel={() => setShowForm(false)}
+        isSubmitting={isSubmitting}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="pkg-name">Nom</Label>
+          <Input
+            id="pkg-name"
+            value={formState.name}
+            onChange={(e) =>
+              setFormState((f) => ({ ...f, name: e.target.value }))
+            }
+            required
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="pkg-type">Type</Label>
+          <Select
+            value={formState.type}
+            onValueChange={(v) =>
+              setFormState((f) => ({ ...f, type: v }))
+            }
           >
-            <div className="space-y-2">
-              <Label htmlFor="pkg-name">Nom</Label>
-              <Input
-                id="pkg-name"
-                value={formState.name}
-                onChange={(e) =>
-                  setFormState((f) => ({ ...f, name: e.target.value }))
-                }
-                required
-              />
-            </div>
+            <SelectTrigger id="pkg-type" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PACKAGING_TYPE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="pkg-type">Type</Label>
-              <Select
-                value={formState.type}
-                onValueChange={(v) =>
-                  setFormState((f) => ({ ...f, type: v }))
-                }
-              >
-                <SelectTrigger id="pkg-type" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PACKAGING_TYPE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="pkg-cost-unit">Coût/unité (€)</Label>
+            <Input
+              id="pkg-cost-unit"
+              type="number"
+              step={0.01}
+              min={0}
+              value={formState.costPerUnit || ""}
+              onChange={(e) =>
+                setFormState((f) => ({
+                  ...f,
+                  costPerUnit: parseFloat(e.target.value) || 0,
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pkg-cost-order">Coût/commande (€)</Label>
+            <Input
+              id="pkg-cost-order"
+              type="number"
+              step={0.01}
+              min={0}
+              value={formState.costPerOrder || ""}
+              onChange={(e) =>
+                setFormState((f) => ({
+                  ...f,
+                  costPerOrder: parseFloat(e.target.value) || 0,
+                }))
+              }
+            />
+          </div>
+        </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="pkg-cost-unit">Coût/unité (€)</Label>
-                <Input
-                  id="pkg-cost-unit"
-                  type="number"
-                  step={0.01}
-                  min={0}
-                  value={formState.costPerUnit || ""}
-                  onChange={(e) =>
-                    setFormState((f) => ({
-                      ...f,
-                      costPerUnit: parseFloat(e.target.value) || 0,
-                    }))
-                  }
+        <div className="space-y-3">
+          <Label>S'applique à</Label>
+          <div className="grid grid-cols-2 gap-3">
+            {PRODUCT_TYPE_OPTIONS.map((opt) => (
+              <div key={opt.value} className="flex items-center gap-2">
+                <Checkbox
+                  id={`pkg-pt-${opt.value}`}
+                  checked={formState.appliesTo.includes(opt.value)}
+                  onCheckedChange={() => toggleAppliesTo(opt.value)}
                 />
+                <Label
+                  htmlFor={`pkg-pt-${opt.value}`}
+                  className="font-normal"
+                >
+                  {opt.label}
+                </Label>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="pkg-cost-order">Coût/commande (€)</Label>
-                <Input
-                  id="pkg-cost-order"
-                  type="number"
-                  step={0.01}
-                  min={0}
-                  value={formState.costPerOrder || ""}
-                  onChange={(e) =>
-                    setFormState((f) => ({
-                      ...f,
-                      costPerOrder: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                />
-              </div>
-            </div>
+            ))}
+          </div>
+        </div>
 
-            <div className="space-y-3">
-              <Label>S'applique à</Label>
-              <div className="grid grid-cols-2 gap-3">
-                {PRODUCT_TYPE_OPTIONS.map((opt) => (
-                  <div key={opt.value} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`pkg-pt-${opt.value}`}
-                      checked={formState.appliesTo.includes(opt.value)}
-                      onCheckedChange={() => toggleAppliesTo(opt.value)}
-                    />
-                    <Label
-                      htmlFor={`pkg-pt-${opt.value}`}
-                      className="font-normal"
-                    >
-                      {opt.label}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Switch
-                id="pkg-active"
-                checked={formState.active}
-                onCheckedChange={(checked) =>
-                  setFormState((f) => ({ ...f, active: !!checked }))
-                }
-              />
-              <Label htmlFor="pkg-active">Actif</Label>
-            </div>
-          </ConfigForm>
-        </DialogContent>
-      </Dialog>
+        <div className="flex items-center gap-3">
+          <Switch
+            id="pkg-active"
+            checked={formState.active}
+            onCheckedChange={(checked) =>
+              setFormState((f) => ({ ...f, active: !!checked }))
+            }
+          />
+          <Label htmlFor="pkg-active">Actif</Label>
+        </div>
+      </ConfigDialog>
 
       <DeleteConfirmDialog
         open={!!deleteId}
