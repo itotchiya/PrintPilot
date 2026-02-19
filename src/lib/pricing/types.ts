@@ -90,8 +90,8 @@ export const EMPTY_QUOTE_INPUT: QuoteInput = {
   notes: "",
 };
 
-// Wizard step numbers (1-indexed)
-export type WizardStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+// Wizard step numbers (1-indexed); 4=Couverture, 5=Intérieur (merged from old Papier/Couleurs/Finitions)
+export type WizardStep = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 export interface WizardState {
   currentStep: WizardStep;

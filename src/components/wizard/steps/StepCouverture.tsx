@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import {
@@ -11,14 +12,33 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { canHaveBinding, canHaveFolds } from "@/lib/pricing/product-rules";
+import {
+  canHaveCover,
+  canHaveFolds,
+  canHaveRectoVerso,
+} from "@/lib/pricing/product-rules";
 import type { StepProps } from "../WizardContainer";
 
-interface BindingType {
+interface PaperGrammage {
+  id: string;
+  grammage: number;
+  pricePerKg: number;
+  active: boolean;
+}
+
+interface PaperType {
   id: string;
   name: string;
-  minPages: number;
-  maxPages: number | null;
+  category: string;
+  active: boolean;
+  grammages: PaperGrammage[];
+}
+
+interface ColorMode {
+  id: string;
+  name: string;
+  platesPerSide: number;
+  hasVarnish: boolean;
   active: boolean;
 }
 
@@ -42,25 +62,106 @@ const LAMINATION_MODES = [
   "Pelliculage Recto Verso",
 ] as const;
 
-export function StepFinishing({ data, updateData }: StepProps) {
-  const [bindingTypes, setBindingTypes] = useState<BindingType[]>([]);
-  const [foldTypes, setFoldTypes] = useState<FoldType[]>([]);
-  const [laminationFinishes, setLaminationFinishes] = useState<
-    LaminationFinish[]
-  >([]);
+function PaperSelector({
+  label,
+  required,
+  paperTypes,
+  selectedTypeId,
+  selectedGrammage,
+  onTypeChange,
+  onGrammageChange,
+  filterCategory,
+}: {
+  label: string;
+  required?: boolean;
+  paperTypes: PaperType[];
+  selectedTypeId: string | null;
+  selectedGrammage: number | null;
+  onTypeChange: (id: string) => void;
+  onGrammageChange: (g: number) => void;
+  filterCategory?: "INTERIOR" | "COVER";
+}) {
+  const filteredTypes = paperTypes.filter(
+    (p) =>
+      p.active &&
+      (!filterCategory || p.category === filterCategory || p.category === "BOTH")
+  );
+  const selectedType = filteredTypes.find((p) => p.id === selectedTypeId);
+  const grammages =
+    selectedType?.grammages
+      .filter((g) => g.active)
+      .sort((a, b) => a.grammage - b.grammage) ?? [];
 
-  const showBinding = canHaveBinding(data.productType);
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-foreground">
+        {label}
+        {required && " *"}
+      </h3>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Type de papier</Label>
+          <Select value={selectedTypeId ?? ""} onValueChange={onTypeChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Choisir le papier…" />
+            </SelectTrigger>
+            <SelectContent>
+              {filteredTypes.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Grammage (g/m²)</Label>
+          <Select
+            value={selectedGrammage ? String(selectedGrammage) : ""}
+            onValueChange={(v) => onGrammageChange(Number(v))}
+            disabled={!selectedTypeId || grammages.length === 0}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Choisir le grammage…" />
+            </SelectTrigger>
+            <SelectContent>
+              {grammages.map((g) => (
+                <SelectItem key={g.id} value={String(g.grammage)}>
+                  {g.grammage} g/m²
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function StepCouverture({ data, updateData }: StepProps) {
+  const [paperTypes, setPaperTypes] = useState<PaperType[]>([]);
+  const [colorModes, setColorModes] = useState<ColorMode[]>([]);
+  const [foldTypes, setFoldTypes] = useState<FoldType[]>([]);
+  const [laminationFinishes, setLaminationFinishes] = useState<LaminationFinish[]>([]);
+
+  const isBrochure = canHaveCover(data.productType);
   const showFolds = canHaveFolds(data.productType);
+  const showRectoVerso = canHaveRectoVerso(data.productType);
   const showLaminationFinish = data.laminationMode !== "Rien";
 
   useEffect(() => {
-    if (showBinding) {
-      fetch("/api/admin/config/binding")
-        .then((r) => r.json())
-        .then(setBindingTypes)
-        .catch(() => {});
-    }
-  }, [showBinding]);
+    fetch("/api/admin/config/paper")
+      .then((r) => r.json())
+      .then(setPaperTypes)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/admin/config/colors")
+      .then((r) => r.json())
+      .then((all: ColorMode[]) => setColorModes(all.filter((c) => c.active)))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (showFolds) {
@@ -85,45 +186,92 @@ export function StepFinishing({ data, updateData }: StepProps) {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-bold text-foreground">Finitions</h2>
+        <h2 className="text-xl font-bold text-foreground">Couverture</h2>
         <p className="text-sm text-muted-foreground">
-          Reliure, pliage et pelliculage selon le type de produit
+          Papier, couleurs et finitions pour la couverture
+          {!isBrochure && " du produit"}
         </p>
       </div>
 
-      {showBinding && (
+      {isBrochure ? (
+        <PaperSelector
+          label="Papier couverture"
+          required
+          paperTypes={paperTypes}
+          selectedTypeId={data.paperCoverTypeId}
+          selectedGrammage={data.paperCoverGrammage}
+          onTypeChange={(id) =>
+            updateData({ paperCoverTypeId: id, paperCoverGrammage: null })
+          }
+          onGrammageChange={(g) => updateData({ paperCoverGrammage: g })}
+          filterCategory="COVER"
+        />
+      ) : (
+        <PaperSelector
+          label="Papier"
+          required
+          paperTypes={paperTypes}
+          selectedTypeId={data.paperInteriorTypeId}
+          selectedGrammage={data.paperInteriorGrammage}
+          onTypeChange={(id) =>
+            updateData({ paperInteriorTypeId: id, paperInteriorGrammage: null })
+          }
+          onGrammageChange={(g) => updateData({ paperInteriorGrammage: g })}
+        />
+      )}
+
+      <Separator />
+
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-foreground">
+          Couleurs d&apos;impression {isBrochure ? "— Couverture" : ""} *
+        </h3>
+        <Select
+          value={
+            isBrochure
+              ? data.colorModeCoverId ?? ""
+              : data.colorModeInteriorId ?? ""
+          }
+          onValueChange={(v) =>
+            isBrochure
+              ? updateData({ colorModeCoverId: v })
+              : updateData({ colorModeInteriorId: v })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Choisir le mode couleur…" />
+          </SelectTrigger>
+          <SelectContent>
+            {colorModes.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {showRectoVerso && (
         <>
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-foreground">
-              Reliure *
-            </h3>
-            <div className="space-y-2">
-              <Label>Type de reliure</Label>
-              <Select
-                value={data.bindingTypeId ?? ""}
-                onValueChange={(v) => updateData({ bindingTypeId: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choisir la reliure…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {bindingTypes
-                    .filter((b) => b.active)
-                    .map((b) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
           <Separator />
+          <div className="flex items-center justify-between rounded-xl border bg-card p-4">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Recto-Verso</Label>
+              <p className="text-xs text-muted-foreground">
+                Impression sur les deux faces
+              </p>
+            </div>
+            <Switch
+              checked={data.rectoVerso}
+              onCheckedChange={(v) => updateData({ rectoVerso: v })}
+            />
+          </div>
         </>
       )}
 
       {showFolds && (
         <>
+          <Separator />
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-foreground">Pliage *</h3>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -166,7 +314,6 @@ export function StepFinishing({ data, updateData }: StepProps) {
                 </Select>
               </div>
             </div>
-
             <div className="space-y-3">
               <div className="flex items-center justify-between py-1">
                 <div>
@@ -191,7 +338,6 @@ export function StepFinishing({ data, updateData }: StepProps) {
                   }
                 />
               </div>
-
               {secondaryEnabled && (
                 <div className="space-y-2 pl-4 border-l-2 border-muted">
                   <Label htmlFor="secondaryFoldCount">
@@ -217,9 +363,10 @@ export function StepFinishing({ data, updateData }: StepProps) {
               )}
             </div>
           </div>
-          <Separator />
         </>
       )}
+
+      <Separator />
 
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-foreground">Pelliculage</h3>
@@ -248,7 +395,6 @@ export function StepFinishing({ data, updateData }: StepProps) {
               </SelectContent>
             </Select>
           </div>
-
           {showLaminationFinish && (
             <div className="space-y-2">
               <Label>Finition</Label>

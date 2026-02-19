@@ -13,9 +13,8 @@ import { getStepLabel } from "@/lib/pricing/product-rules";
 import { StepProductType } from "./steps/StepProductType";
 import { StepQuantityFormat } from "./steps/StepQuantityFormat";
 import { StepPages } from "./steps/StepPages";
-import { StepPaper } from "./steps/StepPaper";
-import { StepColors } from "./steps/StepColors";
-import { StepFinishing } from "./steps/StepFinishing";
+import { StepCouverture } from "./steps/StepCouverture";
+import { StepInterior } from "./steps/StepInterior";
 import { StepDelivery } from "./steps/StepDelivery";
 import { StepSummary } from "./steps/StepSummary";
 
@@ -82,14 +81,12 @@ export function WizardContainer() {
       case 3:
         return <StepPages {...stepProps} />;
       case 4:
-        return <StepPaper {...stepProps} />;
+        return <StepCouverture {...stepProps} />;
       case 5:
-        return <StepColors {...stepProps} />;
+        return <StepInterior {...stepProps} />;
       case 6:
-        return <StepFinishing {...stepProps} />;
-      case 7:
         return <StepDelivery {...stepProps} />;
-      case 8:
+      case 7:
         return <StepSummary {...stepProps} />;
       default:
         return null;
@@ -110,8 +107,8 @@ export function WizardContainer() {
         <div className="p-6 md:p-8">{renderStep()}</div>
       </div>
 
-      {/* Navigation — not shown on step 1 (clicks auto-advance) or step 8 (has own buttons) */}
-      {currentStep !== 1 && currentStep !== 8 && (
+      {/* Navigation — not shown on step 1 (clicks auto-advance) or step 7 (summary has own buttons) */}
+      {currentStep !== 1 && currentStep !== 7 && (
         <div className="space-y-2 pb-4">
           {!canGoNext && stepValidation.missing && stepValidation.missing.length > 0 && (
             <p className="text-sm text-amber-600 dark:text-amber-400">

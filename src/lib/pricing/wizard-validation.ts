@@ -2,7 +2,6 @@ import type { QuoteInput, WizardStep } from "./types";
 import {
   canHaveCover,
   canHaveInterior,
-  canHaveBinding,
   canHaveFolds,
   isPagesValid,
 } from "./product-rules";
@@ -46,46 +45,35 @@ export function validateStep(step: WizardStep, data: QuoteInput): StepValidation
     }
 
     case 4: {
-      if (canHaveInterior(data.productType)) {
-        if (!data.paperInteriorTypeId) missing.push("Papier intérieur — type");
-        if (data.paperInteriorGrammage == null || data.paperInteriorGrammage <= 0)
-          missing.push("Papier intérieur — grammage");
-      }
+      // Couverture: paper (cover or single), colors (cover or single), folds (dépliant), lamination
       if (canHaveCover(data.productType)) {
         if (!data.paperCoverTypeId) missing.push("Papier couverture — type");
         if (data.paperCoverGrammage == null || data.paperCoverGrammage <= 0)
           missing.push("Papier couverture — grammage");
-      }
-      // Non-brochure: only "body" paper (interior is used as main)
-      if (!canHaveInterior(data.productType) && !canHaveCover(data.productType)) {
+        if (!data.colorModeCoverId) missing.push("Couleurs couverture");
+      } else {
         if (!data.paperInteriorTypeId) missing.push("Papier — type");
         if (data.paperInteriorGrammage == null || data.paperInteriorGrammage <= 0)
           missing.push("Papier — grammage");
-      }
-      return { valid: missing.length === 0, missing: missing.length ? missing : undefined };
-    }
-
-    case 5: {
-      if (canHaveCover(data.productType) && !data.colorModeCoverId)
-        missing.push("Couleurs couverture");
-      if (canHaveInterior(data.productType) && !data.colorModeInteriorId)
-        missing.push("Couleurs intérieur");
-      // Flyer/Carte: one color mode (interior is used for recto or both)
-      if (!canHaveCover(data.productType) && !canHaveInterior(data.productType)) {
         if (!data.colorModeInteriorId && !data.colorModeCoverId) missing.push("Mode couleur");
       }
-      return { valid: missing.length === 0, missing: missing.length ? missing : undefined };
-    }
-
-    case 6: {
-      if (canHaveBinding(data.productType) && !data.bindingTypeId) missing.push("Reliure");
       if (canHaveFolds(data.productType) && !data.foldTypeId) missing.push("Pliage");
       if (data.laminationMode !== "Rien" && !data.laminationFinishId)
         missing.push("Finition pelliculage");
       return { valid: missing.length === 0, missing: missing.length ? missing : undefined };
     }
 
-    case 7: {
+    case 5: {
+      // Intérieur (brochure only): paper interior, colors interior
+      if (!canHaveInterior(data.productType)) return { valid: true };
+      if (!data.paperInteriorTypeId) missing.push("Papier intérieur — type");
+      if (data.paperInteriorGrammage == null || data.paperInteriorGrammage <= 0)
+        missing.push("Papier intérieur — grammage");
+      if (!data.colorModeInteriorId) missing.push("Couleurs intérieur");
+      return { valid: missing.length === 0, missing: missing.length ? missing : undefined };
+    }
+
+    case 6: {
       const hasValidPoint = data.deliveryPoints.some(
         (p) => (p.departmentCode?.trim() || p.departmentName?.trim()) && p.copies > 0
       );
@@ -94,7 +82,7 @@ export function validateStep(step: WizardStep, data: QuoteInput): StepValidation
       return { valid: missing.length === 0, missing: missing.length ? missing : undefined };
     }
 
-    case 8:
+    case 7:
       return { valid: true };
 
     default:
