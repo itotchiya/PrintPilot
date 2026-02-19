@@ -1,6 +1,7 @@
 "use client";
 
 import { signOut, useSession } from "next-auth/react";
+import { useTheme } from "next-themes";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -10,11 +11,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, User, Shield } from "lucide-react";
+import { LogOut, User, Shield, Sun, Moon, Monitor } from "lucide-react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 export function UserMenu() {
   const { data: session } = useSession();
+  const { theme, setTheme } = useTheme();
 
   if (!session?.user) return null;
 
@@ -46,6 +49,48 @@ export function UserMenu() {
           <p className="text-sm font-medium">{session.user.name}</p>
           <p className="text-xs text-muted-foreground">{session.user.email}</p>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <div className="px-2 py-1.5">
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Thème</p>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setTheme("light")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors",
+                theme === "light"
+                  ? "bg-primary/10 text-primary"
+                  : "hover:bg-accent"
+              )}
+            >
+              <Sun className="h-3.5 w-3.5" />
+              Clair
+            </button>
+            <button
+              onClick={() => setTheme("dark")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors",
+                theme === "dark"
+                  ? "bg-primary/10 text-primary"
+                  : "hover:bg-accent"
+              )}
+            >
+              <Moon className="h-3.5 w-3.5" />
+              Sombre
+            </button>
+            <button
+              onClick={() => setTheme("system")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors",
+                theme === "system"
+                  ? "bg-primary/10 text-primary"
+                  : "hover:bg-accent"
+              )}
+            >
+              <Monitor className="h-3.5 w-3.5" />
+              Auto
+            </button>
+          </div>
+        </div>
         <DropdownMenuSeparator />
         {isAdmin && (
           <DropdownMenuItem asChild>

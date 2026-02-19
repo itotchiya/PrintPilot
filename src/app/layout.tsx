@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Sans, DM_Mono } from "next/font/google";
+import { ThemeProvider } from "next-themes";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -30,10 +31,12 @@ export default function RootLayout({
   return (
     <html lang="fr" suppressHydrationWarning>
       <body className={`${dmSans.variable} ${dmMono.variable} antialiased`}>
-        <SessionProvider>
-          {children}
-          <Toaster richColors position="top-right" />
-        </SessionProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <SessionProvider>
+            {children}
+            <Toaster richColors position="top-right" />
+          </SessionProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

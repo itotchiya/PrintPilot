@@ -255,7 +255,7 @@ export default function AdminQuotesPage() {
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">
-                Tous les devis
+                Devis clients
               </h1>
               {!loading && (
                 <Badge variant="secondary" className="text-xs tabular-nums">
@@ -266,7 +266,7 @@ export default function AdminQuotesPage() {
               )}
             </div>
             <p className="text-sm text-muted-foreground">
-              Gestion de tous les devis clients
+              Gestion de tous les devis de vos clients
             </p>
           </div>
         </div>
