@@ -6,7 +6,8 @@ export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   const role = (session?.user as { role?: string } | undefined)?.role;
 
-  if (role === "ADMIN" || role === "EMPLOYEE") {
+  const adminRoles = ["ADMIN", "EMPLOYEE", "SUPER_ADMIN", "FOURNISSEUR"];
+  if (role && adminRoles.includes(role)) {
     redirect("/admin");
   }
 

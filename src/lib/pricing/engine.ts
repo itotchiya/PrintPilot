@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { QuoteInput } from "./types";
 import { calcWeightPerCopyGrams, estimateSpineThicknessCm } from "./weight";
 import { calcPosesPerSheet, calcCahierStructure } from "./imposition";
-import { calcDigitalPrice } from "./digital";
+import { calcDigitalPrice, getDigitalClicks, getClickDivisorForFormat } from "./digital";
 import type { DigitalInput, DigitalBreakdown } from "./digital";
 import { calcOffsetPrice } from "./offset";
 import type { OffsetInput, OffsetBreakdown } from "./offset";
@@ -16,6 +16,13 @@ function toNum(v: unknown): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
+export interface CalculationVariable {
+  name: string;
+  value: string | number;
+  /** Optional formula showing how the value was calculated (e.g. "Clics × Tarif = 7000 × 0.035") */
+  formula?: string;
+}
+
 export interface PricingResult {
   digitalTotal: number;
   offsetTotal: number;
@@ -24,12 +31,22 @@ export interface PricingResult {
   deliveryCost: number;
   weightPerCopyGrams: number;
   currency: "EUR";
+  /** Calculation variables for admin/superadmin preview: inputs, numérique, offset. */
+  calculationVariablesInputs: CalculationVariable[];
+  calculationVariablesNumerique: CalculationVariable[];
+  calculationVariablesOffset: CalculationVariable[];
 }
 
-export async function calculatePricing(input: QuoteInput): Promise<PricingResult> {
+export async function calculatePricing(
+  input: QuoteInput,
+  fournisseurId?: string | null
+): Promise<PricingResult> {
   if (!input.productType || !input.quantity || !input.format) {
     throw new Error("Donnees de devis incompletes");
   }
+
+  const scope = fournisseurId ?? null;
+  const scopeWhere = { fournisseurId: scope };
 
   const [
     paperTypes,
@@ -45,18 +62,29 @@ export async function calculatePricing(input: QuoteInput): Promise<PricingResult
     machineFormats,
     clickDivisors,
   ] = await Promise.all([
-    prisma.paperType.findMany({ include: { grammages: true } }),
-    prisma.colorMode.findMany(),
-    prisma.bindingType.findMany({ include: { digitalPriceTiers: true, offsetPriceTiers: true } }),
-    prisma.foldType.findMany({ include: { costs: true } }),
-    prisma.laminationFinish.findMany({ include: { digitalPriceTiers: true } }),
+    prisma.paperType.findMany({ where: scopeWhere, include: { grammages: true } }),
+    prisma.colorMode.findMany({ where: scopeWhere }),
+    prisma.bindingType.findMany({
+      where: scopeWhere,
+      include: { digitalPriceTiers: true, offsetPriceTiers: true },
+    }),
+    prisma.foldType.findMany({ where: scopeWhere, include: { costs: true } }),
+    prisma.laminationFinish.findMany({
+      where: scopeWhere,
+      include: { digitalPriceTiers: true },
+    }),
     prisma.department.findMany(),
-    prisma.carrier.findMany({ where: { active: true }, include: { deliveryRates: true } }),
-    prisma.digitalConfig.findMany(),
-    prisma.offsetConfig.findMany(),
-    prisma.marginConfig.findMany(),
-    prisma.machineFormat.findMany({ where: { isDefault: true } }),
-    prisma.formatClickDivisor.findMany(),
+    prisma.carrier.findMany({
+      where: { ...scopeWhere, active: true },
+      include: { deliveryRates: true },
+    }),
+    prisma.digitalConfig.findMany({ where: scopeWhere }),
+    prisma.offsetConfig.findMany({ where: scopeWhere }),
+    prisma.marginConfig.findMany({ where: scopeWhere }),
+    prisma.machineFormat.findMany({
+      where: { ...scopeWhere, isDefault: true },
+    }),
+    prisma.formatClickDivisor.findMany({ where: scopeWhere }),
   ]);
 
   function cfgVal(rows: { key: string; value: unknown }[], key: string, fallback = 0): number {
@@ -285,6 +313,176 @@ export async function calculatePricing(input: QuoteInput): Promise<PricingResult
     total: safeOffsetTotal,
   };
 
+  const digitalClicks = getDigitalClicks(digitalInput);
+  const clickDivisor = getClickDivisorForFormat(
+    digitalClickDivisors,
+    productWidthCm,
+    productHeightCm
+  );
+  const varsInputs: CalculationVariable[] = [];
+  const varsNumerique: CalculationVariable[] = [];
+  const varsOffset: CalculationVariable[] = [];
+
+  function addTo(arr: CalculationVariable[], name: string, value: string | number, formula?: string) {
+    arr.push({ name, value, formula });
+  }
+
+  const rateInterior = (colorModeInterior?.platesPerSide ?? 4) >= 4 ? digitalConfig.colorClickRate : digitalConfig.monoClickRate;
+
+  // ——— Entrées du devis (common) ———
+  addTo(varsInputs, "Type de produit", input.productType ?? "");
+  addTo(varsInputs, "Quantité", input.quantity);
+  addTo(varsInputs, "Format (cm)", input.format ? `${toNum(input.format.widthCm)} × ${toNum(input.format.heightCm)}` : "");
+  addTo(varsInputs, "Pages intérieur", pagesInterior);
+  addTo(varsInputs, "Pages couverture", hasCover ? 4 : 0);
+  addTo(varsInputs, "Rabat (cm)", hasCover ? (input.flapSizeCm ?? 0) : "—");
+  addTo(varsInputs, "Recto-verso", input.rectoVerso ? "Oui" : "Non");
+  addTo(varsInputs, "Papier intérieur (g/m²)", input.paperInteriorGrammage ?? "");
+  addTo(varsInputs, "Papier couverture (g/m²)", hasCover ? (input.paperCoverGrammage ?? "") : "—");
+  addTo(varsInputs, "Couleurs intérieur", colorModeInterior?.name ?? input.colorModeInteriorName ?? "");
+  addTo(varsInputs, "Couleurs couverture", hasCover ? (colorModeCover?.name ?? input.colorModeCoverName ?? "") : "—");
+  addTo(varsInputs, "Reliure", bindingType?.name ?? "—");
+  addTo(varsInputs, "Pliage (nb plis)", input.foldCount ?? 0);
+  addTo(varsInputs, "Pelliculage", input.laminationMode ?? "Rien");
+  addTo(varsInputs, "Poses par feuille", posesPerSheet);
+  addTo(varsInputs, "Poids par ex. (g)", Math.round(weightPerCopyGrams * 10) / 10);
+
+  // ——— Numérique ———
+  addTo(varsNumerique, "Tarif clic couleur (€)", digitalConfig.colorClickRate);
+  addTo(varsNumerique, "Tarif clic N&B (€)", digitalConfig.monoClickRate);
+  addTo(varsNumerique, "Mise en route couleur (€)", digitalConfig.setupColor);
+  addTo(varsNumerique, "Mise en route N&B (€)", digitalConfig.setupMono);
+  addTo(varsNumerique, "Traitement fichier (€)", digitalConfig.fileProcessing);
+  addTo(varsNumerique, "Diviseur mise en route", digitalConfig.setupDivisor);
+
+  addTo(
+    varsNumerique,
+    "Clics intérieur (nombre)",
+    Math.round(digitalClicks.clicksInterior),
+    hasCover
+      ? `(Pages × Quantité) / (Diviseur RV × 2) = ${pagesInterior} × ${input.quantity} / (${clickDivisor.rv} × 2) = ${Math.round(digitalClicks.clicksInterior)}`
+      : `Quantité / Diviseur = ${input.quantity} / ${input.rectoVerso ? clickDivisor.rv : clickDivisor.recto} = ${Math.round(digitalClicks.clicksInterior)}`
+  );
+  addTo(
+    varsNumerique,
+    "Clics couverture (nombre)",
+    Math.round(digitalClicks.clicksCover),
+    hasCover ? `(4 × Quantité) / (Diviseur RV × 2) = 4 × ${input.quantity} / (${clickDivisor.rv} × 2) = ${Math.round(digitalClicks.clicksCover)}` : undefined
+  );
+
+  addTo(
+    varsNumerique,
+    "Coût clics intérieur (€)",
+    Math.round(digitalBreakdown.clickCostInterior * 100) / 100,
+    `Clics intérieur × Tarif clic = ${Math.round(digitalClicks.clicksInterior)} × ${rateInterior} = ${(Math.round(digitalBreakdown.clickCostInterior * 100) / 100).toFixed(2)}`
+  );
+  addTo(
+    varsNumerique,
+    "Coût clics couverture (€)",
+    Math.round(digitalBreakdown.clickCostCover * 100) / 100,
+    hasCover
+      ? `Clics couverture × Tarif clic couleur = ${Math.round(digitalClicks.clicksCover)} × ${digitalConfig.colorClickRate} = ${(Math.round(digitalBreakdown.clickCostCover * 100) / 100).toFixed(2)}`
+      : undefined
+  );
+  addTo(
+    varsNumerique,
+    "Papier intérieur (num.)",
+    Math.round(digitalBreakdown.paperCostInterior * 100) / 100,
+    `(Clics int. / 1000) × Poids 1000 feuilles × Prix/kg = (${Math.round(digitalClicks.clicksInterior)}/1000) × …`
+  );
+  addTo(
+    varsNumerique,
+    "Papier couverture (num.)",
+    Math.round(digitalBreakdown.paperCostCover * 100) / 100,
+    hasCover && digitalBreakdown.paperCostCover
+      ? `(Clics couv. / 1000) × Poids 1000 feuilles × Prix/kg`
+      : undefined
+  );
+  addTo(
+    varsNumerique,
+    "Mise en route (€)",
+    Math.round(digitalBreakdown.setupCost * 100) / 100,
+    `(Mise en route couleur + N&B) / Diviseur = (${digitalConfig.setupColor} + ${digitalConfig.setupMono}) / ${digitalConfig.setupDivisor} = ${(digitalBreakdown.setupCost).toFixed(2)}`
+  );
+  addTo(varsNumerique, "Traitement fichier (€)", Math.round(digitalBreakdown.fileProcessing * 100) / 100, "Forfait par commande");
+  addTo(varsNumerique, "Reliure (num.)", Math.round(digitalBreakdown.bindingCost * 100) / 100, "Selon type et tranche (pages × quantité)");
+  addTo(varsNumerique, "Pelliculage (num.)", Math.round(digitalBreakdown.laminationCost * 100) / 100, "Feuilles à pelliculer × tarif feuille (+ setup si tranche)");
+  addTo(
+    varsNumerique,
+    "Sous-total numérique (€)",
+    Math.round(digitalBreakdown.subtotal * 100) / 100,
+    "Clics int. + Clics couv. + Papier + Mise en route + Fichier + Reliure + Pelliculage"
+  );
+  addTo(varsNumerique, "Livraison (€)", Math.round(deliveryResult.total * 100) / 100, "Par point : zone × poids → tarif transport (+ hayon si demandé)");
+  addTo(varsNumerique, "Marge numérique (%)", digitalMarginRate * 100, "Appliquée sur (Sous-total + Livraison)");
+  addTo(
+    varsNumerique,
+    "Total numérique HT (€)",
+    Math.round(digitalTotal * 100) / 100,
+    `(Sous-total numérique + Livraison) × (1 + Marge %) = (${(digitalBreakdown.subtotal).toFixed(2)} + ${deliveryResult.total.toFixed(2)}) × (1 + ${(digitalMarginRate * 100).toFixed(0)}%)`
+  );
+
+  // ——— Offset ———
+  addTo(varsOffset, "Plaque (€)", offsetConfig.plateCost);
+  addTo(varsOffset, "Plaque grand format (€)", offsetConfig.plateCostLarge);
+  addTo(varsOffset, "Calage/plaque (€)", offsetConfig.calagePerPlate);
+  addTo(varsOffset, "Traitement fichier base (€)", offsetConfig.fileProcessingBase);
+  addTo(varsOffset, "Traitement fichier/plaque (€)", offsetConfig.fileProcessingPerPlate);
+  addTo(varsOffset, "Gâche calage (feuilles)", offsetConfig.gacheCalage);
+  addTo(varsOffset, "Marge papier (%)", offsetConfig.paperMarginRate * 100);
+
+  addTo(
+    varsOffset,
+    "Papier intérieur (off.)",
+    Math.round(safeOffsetBreakdown.paperCostInterior * 100) / 100,
+    "Feuilles (avec gâche) × surface × grammage × prix/kg × (1 + marge papier)"
+  );
+  addTo(
+    varsOffset,
+    "Papier couverture (off.)",
+    Math.round(safeOffsetBreakdown.paperCostCover * 100) / 100,
+    hasCover ? "Feuilles (avec gâche) × surface × grammage × prix/kg × (1 + marge)" : undefined
+  );
+  const totalPlates = hasCover
+    ? cahierStruct.numCahiers * toNum(colorModeInterior?.platesPerSide ?? 4) * 2 + toNum(colorModeCover?.platesPerSide ?? 4) * 2
+    : (input.rectoVerso ? 2 : 1) * toNum(colorModeInterior?.platesPerSide ?? 4);
+  addTo(
+    varsOffset,
+    "Plaques (€)",
+    Math.round(safeOffsetBreakdown.plateCost * 100) / 100,
+    `Nombre de plaques × Coût plaque = ${totalPlates} × ${offsetConfig.plateCost} = ${(safeOffsetBreakdown.plateCost).toFixed(2)}`
+  );
+  addTo(
+    varsOffset,
+    "Calage (€)",
+    Math.round(safeOffsetBreakdown.calageCost * 100) / 100,
+    `Nombre de plaques × Calage/plaque = ${totalPlates} × ${offsetConfig.calagePerPlate} = ${(safeOffsetBreakdown.calageCost).toFixed(2)}`
+  );
+  addTo(varsOffset, "Roulage (€)", Math.round(safeOffsetBreakdown.runningCost * 100) / 100, "Feuilles / 1000 × Tarif tier (selon volume)");
+  addTo(
+    varsOffset,
+    "Fichiers (€)",
+    Math.round(safeOffsetBreakdown.fileProcessing * 100) / 100,
+    `Base + (Plaques × Tarif/plaque) = ${offsetConfig.fileProcessingBase} + (${totalPlates} × ${offsetConfig.fileProcessingPerPlate})`
+  );
+  addTo(varsOffset, "Reliure (off.)", Math.round(safeOffsetBreakdown.bindingCost * 100) / 100, "Calage forfait + (quantité/1000 × roulage/1000)");
+  addTo(varsOffset, "Pelliculage (off.)", Math.round(safeOffsetBreakdown.laminationCost * 100) / 100, "Max(forfait + surface × qty × tarif/m², minimum facturable)");
+  addTo(varsOffset, "Pliage (€)", Math.round(safeOffsetBreakdown.foldCost * 100) / 100, "Tarif selon type de pli (table FoldCost)");
+  addTo(
+    varsOffset,
+    "Sous-total offset (€)",
+    Math.round(safeOffsetBreakdown.subtotal * 100) / 100,
+    "Papier + Plaques + Calage + Roulage + Fichiers + Reliure + Pelliculage + Pliage"
+  );
+  addTo(varsOffset, "Livraison (€)", Math.round(deliveryResult.total * 100) / 100, "Par point : zone × poids → tarif transport (+ hayon si demandé)");
+  addTo(varsOffset, "Marge offset (%)", offsetMarginRate * 100, "Appliquée sur (Sous-total + Livraison)");
+  addTo(
+    varsOffset,
+    "Total offset HT (€)",
+    safeOffsetTotal,
+    `(Sous-total offset + Livraison) × (1 + Marge %) = (${safeOffsetBreakdown.subtotal.toFixed(2)} + ${deliveryResult.total.toFixed(2)}) × (1 + ${(offsetMarginRate * 100).toFixed(0)}%)`
+  );
+
   return {
     digitalTotal: Math.round(digitalTotal * 100) / 100,
     offsetTotal: safeOffsetTotal,
@@ -293,5 +491,8 @@ export async function calculatePricing(input: QuoteInput): Promise<PricingResult
     deliveryCost: deliveryResult.total,
     weightPerCopyGrams,
     currency: "EUR",
+    calculationVariablesInputs: varsInputs,
+    calculationVariablesNumerique: varsNumerique,
+    calculationVariablesOffset: varsOffset,
   };
 }

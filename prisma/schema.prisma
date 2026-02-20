@@ -10,8 +10,11 @@ datasource db {
 // ─── ENUMS ────────────────────────────────────────────────────────────────────
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   EMPLOYEE
+  FOURNISSEUR
+  ACHETEUR
   CLIENT
 }
 
@@ -45,17 +48,33 @@ enum Orientation {
 // ─── USER & AUTH ──────────────────────────────────────────────────────────────
 
 model User {
-  id            String      @id @default(cuid())
-  name          String
-  email         String      @unique
-  passwordHash  String
-  role          Role        @default(CLIENT)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  quotes        Quote[]
+  id                  String      @id @default(cuid())
+  name                String
+  email               String      @unique
+  passwordHash        String
+  role                Role        @default(CLIENT)
+  configCustomizedAt  DateTime?   // set when Fournisseur first changes/adds config (hides demo alert)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  quotes              Quote[]
+  acheteurAccess      AcheteurFournisseurAccess[] @relation("AcheteurAccess")
+  fournisseurAccess   AcheteurFournisseurAccess[] @relation("FournisseurAccess")
 
   @@index([email])
   @@index([role])
+}
+
+model AcheteurFournisseurAccess {
+  id             String   @id @default(cuid())
+  acheteurId     String
+  fournisseurId  String
+  acheteur       User     @relation("AcheteurAccess", fields: [acheteurId], references: [id], onDelete: Cascade)
+  fournisseur    User     @relation("FournisseurAccess", fields: [fournisseurId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@unique([acheteurId, fournisseurId])
+  @@index([acheteurId])
+  @@index([fournisseurId])
 }
 
 // ─── QUOTES ───────────────────────────────────────────────────────────────────
@@ -111,6 +130,8 @@ model Quote {
   weightPerCopy     Decimal?
   totalWeight       Decimal?
 
+  fournisseurResults Json?
+
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
@@ -122,14 +143,18 @@ model Quote {
 // ─── PAPER CONFIG ─────────────────────────────────────────────────────────────
 
 model PaperType {
-  id          String          @id @default(cuid())
-  name        String          @unique
-  category    PaperCategory   @default(BOTH)
-  active      Boolean         @default(true)
-  sortOrder   Int             @default(0)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  grammages   PaperGrammage[]
+  id             String          @id @default(cuid())
+  fournisseurId  String?
+  name           String
+  category       PaperCategory   @default(BOTH)
+  active         Boolean         @default(true)
+  sortOrder      Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  grammages      PaperGrammage[]
+
+  @@unique([fournisseurId, name])
+  @@index([fournisseurId])
 }
 
 model PaperGrammage {
@@ -151,35 +176,44 @@ model PaperGrammage {
 // ─── FORMAT CONFIG ────────────────────────────────────────────────────────────
 
 model FormatPreset {
-  id            String        @id @default(cuid())
-  name          String        @unique
-  widthCm       Decimal
-  heightCm      Decimal
-  orientation   Orientation   @default(PORTRAIT)
-  productTypes  Json          @default("[]")
-  active        Boolean       @default(true)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  fournisseurId  String?
+  name           String
+  widthCm        Decimal
+  heightCm       Decimal
+  orientation    Orientation   @default(PORTRAIT)
+  productTypes   Json          @default("[]")
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([fournisseurId, name])
+  @@index([fournisseurId])
 }
 
 // ─── COLOR CONFIG ─────────────────────────────────────────────────────────────
 
 model ColorMode {
   id              String    @id @default(cuid())
-  name            String    @unique
+  fournisseurId   String?
+  name            String
   platesPerSide   Int
   hasVarnish      Boolean   @default(false)
   clickMultiplier Decimal   @default(1.0)
   active          Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  @@unique([fournisseurId, name])
+  @@index([fournisseurId])
 }
 
 // ─── BINDING / FINISHING CONFIG ───────────────────────────────────────────────
 
 model BindingType {
   id                String                    @id @default(cuid())
-  name              String                    @unique
+  fournisseurId     String?
+  name              String
   minPages          Int
   maxPages          Int?
   active            Boolean                   @default(true)
@@ -187,6 +221,9 @@ model BindingType {
   updatedAt         DateTime                  @updatedAt
   digitalPriceTiers BindingPriceTierDigital[]
   offsetPriceTiers  BindingPriceTierOffset[]
+
+  @@unique([fournisseurId, name])
+  @@index([fournisseurId])
 }
 
 model BindingPriceTierDigital {
@@ -222,13 +259,17 @@ model BindingPriceTierOffset {
 
 model FoldType {
   id              String      @id @default(cuid())
-  name            String      @unique
+  fournisseurId   String?
+  name            String
   maxFolds        Int         @default(6)
   canBeSecondary  Boolean     @default(false)
   active          Boolean     @default(true)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   costs           FoldCost[]
+
+  @@unique([fournisseurId, name])
+  @@index([fournisseurId])
 }
 
 model FoldCost {
@@ -247,15 +288,20 @@ model FoldCost {
 // ─── LAMINATION CONFIG ────────────────────────────────────────────────────────
 
 model LaminationMode {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  fournisseurId  String?
+  name           String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([fournisseurId, name])
+  @@index([fournisseurId])
 }
 
 model LaminationFinish {
   id                    String                  @id @default(cuid())
-  name                  String                  @unique
+  fournisseurId         String?
+  name                  String
   offsetPricePerM2      Decimal?
   offsetCalageForfait   Decimal?
   offsetMinimumBilling  Decimal?
@@ -263,6 +309,9 @@ model LaminationFinish {
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
   digitalPriceTiers     LaminationPriceTier[]
+
+  @@unique([fournisseurId, name])
+  @@index([fournisseurId])
 }
 
 model LaminationPriceTier {
@@ -282,15 +331,19 @@ model LaminationPriceTier {
 // ─── PACKAGING CONFIG ─────────────────────────────────────────────────────────
 
 model PackagingOption {
-  id            String    @id @default(cuid())
-  name          String    @unique
-  type          String
-  costPerUnit   Decimal   @default(0)
-  costPerOrder  Decimal   @default(0)
-  appliesTo     Json      @default("[]")
-  active        Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  fournisseurId  String?
+  name           String
+  type           String
+  costPerUnit    Decimal   @default(0)
+  costPerOrder   Decimal   @default(0)
+  appliesTo      Json      @default("[]")
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([fournisseurId, name])
+  @@index([fournisseurId])
 }
 
 // ─── DELIVERY CONFIG ──────────────────────────────────────────────────────────
@@ -309,12 +362,16 @@ model Department {
 }
 
 model Carrier {
-  id            String          @id @default(cuid())
-  name          String          @unique
-  active        Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  deliveryRates DeliveryRate[]
+  id             String          @id @default(cuid())
+  fournisseurId  String?
+  name           String
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  deliveryRates   DeliveryRate[]
+
+  @@unique([fournisseurId, name])
+  @@index([fournisseurId])
 }
 
 model DeliveryRate {
@@ -335,53 +392,73 @@ model DeliveryRate {
 // ─── OFFSET / DIGITAL / MARGIN CONFIG (Key-Value) ─────────────────────────────
 
 model OffsetConfig {
-  id          String    @id @default(cuid())
-  key         String    @unique
-  value       Decimal
-  unit        String?
-  description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  fournisseurId  String?
+  key            String
+  value          Decimal
+  unit           String?
+  description    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([fournisseurId, key])
+  @@index([fournisseurId])
 }
 
 model DigitalConfig {
-  id          String    @id @default(cuid())
-  key         String    @unique
-  value       Decimal
-  unit        String?
-  description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  fournisseurId  String?
+  key            String
+  value          Decimal
+  unit           String?
+  description    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([fournisseurId, key])
+  @@index([fournisseurId])
 }
 
 model MarginConfig {
-  id          String    @id @default(cuid())
-  key         String    @unique
-  value       Decimal
-  unit        String?
-  description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  fournisseurId  String?
+  key            String
+  value          Decimal
+  unit           String?
+  description    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([fournisseurId, key])
+  @@index([fournisseurId])
 }
 
 // ─── MACHINE / IMPOSITION CONFIG ──────────────────────────────────────────────
 
 model MachineFormat {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  widthCm   Decimal
-  heightCm  Decimal
-  isDefault Boolean   @default(false)
-  active    Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  fournisseurId  String?
+  name           String
+  widthCm        Decimal
+  heightCm       Decimal
+  isDefault      Boolean   @default(false)
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([fournisseurId, name])
+  @@index([fournisseurId])
 }
 
 model FormatClickDivisor {
   id                String    @id @default(cuid())
-  formatName        String    @unique
+  fournisseurId     String?
+  formatName        String
   divisorRecto      Decimal
   divisorRectoVerso Decimal
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+
+  @@unique([fournisseurId, formatName])
+  @@index([fournisseurId])
 }

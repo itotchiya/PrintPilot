@@ -200,9 +200,14 @@ export function StepCouverture({ data, updateData }: StepProps) {
           paperTypes={paperTypes}
           selectedTypeId={data.paperCoverTypeId}
           selectedGrammage={data.paperCoverGrammage}
-          onTypeChange={(id) =>
-            updateData({ paperCoverTypeId: id, paperCoverGrammage: null })
-          }
+          onTypeChange={(id) => {
+            const pt = paperTypes.find((p) => p.id === id);
+            updateData({
+              paperCoverTypeId: id,
+              paperCoverGrammage: null,
+              paperCoverTypeName: pt?.name ?? null,
+            });
+          }}
           onGrammageChange={(g) => updateData({ paperCoverGrammage: g })}
           filterCategory="COVER"
         />
@@ -213,9 +218,14 @@ export function StepCouverture({ data, updateData }: StepProps) {
           paperTypes={paperTypes}
           selectedTypeId={data.paperInteriorTypeId}
           selectedGrammage={data.paperInteriorGrammage}
-          onTypeChange={(id) =>
-            updateData({ paperInteriorTypeId: id, paperInteriorGrammage: null })
-          }
+          onTypeChange={(id) => {
+            const pt = paperTypes.find((p) => p.id === id);
+            updateData({
+              paperInteriorTypeId: id,
+              paperInteriorGrammage: null,
+              paperInteriorTypeName: pt?.name ?? null,
+            });
+          }}
           onGrammageChange={(g) => updateData({ paperInteriorGrammage: g })}
         />
       )}
@@ -232,11 +242,13 @@ export function StepCouverture({ data, updateData }: StepProps) {
               ? data.colorModeCoverId ?? ""
               : data.colorModeInteriorId ?? ""
           }
-          onValueChange={(v) =>
+          onValueChange={(v) => {
+            const mode = colorModes.find((c) => c.id === v);
+            const name = mode?.name ?? null;
             isBrochure
-              ? updateData({ colorModeCoverId: v })
-              : updateData({ colorModeInteriorId: v })
-          }
+              ? updateData({ colorModeCoverId: v, colorModeCoverName: name })
+              : updateData({ colorModeInteriorId: v, colorModeInteriorName: name });
+          }}
         >
           <SelectTrigger>
             <SelectValue placeholder="Choisir le mode couleur…" />
@@ -279,7 +291,13 @@ export function StepCouverture({ data, updateData }: StepProps) {
                 <Label>Type de pli</Label>
                 <Select
                   value={data.foldTypeId ?? ""}
-                  onValueChange={(v) => updateData({ foldTypeId: v })}
+                  onValueChange={(v) => {
+                    const f = foldTypes.find((x) => x.id === v);
+                    updateData({
+                      foldTypeId: v,
+                      foldTypeName: f?.name ?? null,
+                    });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Choisir le pli…" />
@@ -378,8 +396,8 @@ export function StepCouverture({ data, updateData }: StepProps) {
               onValueChange={(v) =>
                 updateData({
                   laminationMode: v as typeof data.laminationMode,
-                  laminationFinishId:
-                    v === "Rien" ? null : data.laminationFinishId,
+                  laminationFinishId: v === "Rien" ? null : data.laminationFinishId,
+                  laminationFinishName: v === "Rien" ? null : data.laminationFinishName,
                 })
               }
             >
@@ -400,7 +418,13 @@ export function StepCouverture({ data, updateData }: StepProps) {
               <Label>Finition</Label>
               <Select
                 value={data.laminationFinishId ?? ""}
-                onValueChange={(v) => updateData({ laminationFinishId: v })}
+                onValueChange={(v) => {
+                  const f = laminationFinishes.find((x) => x.id === v);
+                  updateData({
+                    laminationFinishId: v,
+                    laminationFinishName: f?.name ?? null,
+                  });
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Choisir la finition…" />

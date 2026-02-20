@@ -1,10 +1,10 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { calculatePricing } from "@/lib/pricing/engine";
 import type { QuoteInput } from "@/lib/pricing/types";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() as QuoteInput;
+    const body = (await request.json()) as QuoteInput & { fournisseurId?: string | null };
 
     if (!body.productType || !body.quantity || body.quantity <= 0) {
       return NextResponse.json(
@@ -13,7 +13,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await calculatePricing(body);
+    const { fournisseurId, ...quoteInput } = body;
+    const result = await calculatePricing(quoteInput, fournisseurId);
 
     return NextResponse.json({
       status: "ok",

@@ -8,6 +8,7 @@ import { useWizard } from "@/hooks/useWizard";
 import type { WizardStep } from "@/lib/pricing/types";
 import { validateStep } from "@/lib/pricing/wizard-validation";
 import { getStepLabel } from "@/lib/pricing/product-rules";
+import { getWizardTrackingSnapshot } from "@/lib/pricing/wizard-tracking";
 
 // Step components (imported lazily to keep bundle small)
 import { StepProductType } from "./steps/StepProductType";
@@ -50,11 +51,18 @@ export function WizardContainer() {
       );
       return;
     }
-    // Log step completion for debugging / tracking
-    if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+    // Log full wizard tracking on each step advance
+    if (typeof window !== "undefined") {
       const label = getStepLabel(wizard.currentStep);
-      console.groupCollapsed(`[PrintPilot Wizard] Étape ${wizard.currentStep} enregistrée — ${label}`);
-      console.log("Données actuelles (snapshot):", JSON.parse(JSON.stringify(wizard.data)));
+      const snapshot = getWizardTrackingSnapshot(wizard.data);
+      console.groupCollapsed(
+        `[PrintPilot Wizard] Étape ${wizard.currentStep} terminée — ${label}`
+      );
+      console.log("Step", `${wizard.currentStep} — ${label}`);
+      console.log("Product type", wizard.data.productType ?? null);
+      console.log("Tracking snapshot", snapshot);
+      console.log("Snapshot (complet — tous les champs)", JSON.stringify(snapshot, null, 2));
+      console.log("Données brutes (récap)", JSON.parse(JSON.stringify(wizard.data)));
       console.groupEnd();
     }
     wizard.nextStep();

@@ -96,6 +96,15 @@ export default async function QuotePrintPage({ params }: Props) {
         ? "Impression Offset"
         : "—";
 
+  const fournisseurResults = (quote.fournisseurResults as Array<{
+    fournisseurId: string;
+    fournisseurName: string;
+    digitalTotal: number;
+    offsetTotal: number;
+    deliveryCost?: number;
+  }> | null) ?? null;
+  const hasFournisseurComparison = Array.isArray(fournisseurResults) && fournisseurResults.length > 0;
+
   const sColor = statusColor(quote.status);
 
   // Normalize delivery points for display (wizard stores departmentName, departmentCode, copies)
@@ -318,6 +327,16 @@ export default async function QuotePrintPage({ params }: Props) {
                   value={String(quote.pagesCover)}
                 />
               )}
+              {quote.productType === "BROCHURE" && (
+                <SpecRow
+                  label="Taille du rabat"
+                  value={
+                    quote.flapSize != null && Number(quote.flapSize) > 0
+                      ? `${String(quote.flapSize)} cm`
+                      : "Pas de rabat"
+                  }
+                />
+              )}
               {quote.paperInteriorType && (
                 <SpecRow
                   label="Papier intérieur"
@@ -478,74 +497,114 @@ export default async function QuotePrintPage({ params }: Props) {
           >
             Tarification
           </div>
-          <div
-            style={{
-              background: "#f8f9fa",
-              border: "1px solid #e9ecef",
-              borderRadius: 10,
-              padding: "18px 22px",
-            }}
-          >
-            <div
+          {hasFournisseurComparison ? (
+            <table
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
+                width: "100%",
+                borderCollapse: "collapse" as const,
+                border: "1px solid #e9ecef",
+                fontSize: 13,
               }}
             >
-              <div>
-                <div style={{ fontSize: 12, color: "#6c757d" }}>
-                  Méthode retenue
+              <thead>
+                <tr style={{ background: "#f8f9fa" }}>
+                  <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 600, color: "#495057", borderBottom: "1px solid #e9ecef" }}>
+                    Fournisseur
+                  </th>
+                  <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 600, color: "#495057", borderBottom: "1px solid #e9ecef" }}>
+                    Numérique
+                  </th>
+                  <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 600, color: "#495057", borderBottom: "1px solid #e9ecef" }}>
+                    Offset
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {fournisseurResults!.map((r) => (
+                  <tr key={r.fournisseurId}>
+                    <td style={{ padding: "8px 14px", borderBottom: "1px solid #e9ecef", color: "#212529" }}>
+                      {r.fournisseurName}
+                    </td>
+                    <td style={{ padding: "8px 14px", borderBottom: "1px solid #e9ecef", color: "#212529", textAlign: "right" }}>
+                      {formatCurrency(r.digitalTotal)}
+                    </td>
+                    <td style={{ padding: "8px 14px", borderBottom: "1px solid #e9ecef", color: "#212529", textAlign: "right" }}>
+                      {formatCurrency(r.offsetTotal)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div
+              style={{
+                background: "#f8f9fa",
+                border: "1px solid #e9ecef",
+                borderRadius: 10,
+                padding: "18px 22px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 12, color: "#6c757d" }}>
+                    Méthode retenue
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 700,
+                      color: "#212529",
+                      marginTop: 3,
+                    }}
+                  >
+                    {methodLabel}
+                  </div>
                 </div>
-                <div
-                  style={{
-                    fontSize: 16,
-                    fontWeight: 700,
-                    color: "#212529",
-                    marginTop: 3,
-                  }}
-                >
-                  {methodLabel}
+                <div style={{ textAlign: "right" as const }}>
+                  <div style={{ fontSize: 12, color: "#6c757d" }}>
+                    Montant HT
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 30,
+                      fontWeight: 800,
+                      color: "#212529",
+                      fontVariantNumeric: "tabular-nums",
+                      lineHeight: 1.1,
+                      marginTop: 3,
+                    }}
+                  >
+                    {price != null ? formatCurrency(Number(price)) : "—"}
+                  </div>
                 </div>
               </div>
-              <div style={{ textAlign: "right" as const }}>
-                <div style={{ fontSize: 12, color: "#6c757d" }}>
-                  Montant HT
-                </div>
-                <div
-                  style={{
-                    fontSize: 30,
-                    fontWeight: 800,
-                    color: "#212529",
-                    fontVariantNumeric: "tabular-nums",
-                    lineHeight: 1.1,
-                    marginTop: 3,
-                  }}
-                >
-                  {price != null ? formatCurrency(Number(price)) : "—"}
-                </div>
-              </div>
+              {quote.deliveryCost != null &&
+                Number(quote.deliveryCost) > 0 && (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      paddingTop: 14,
+                      borderTop: "1px solid #dee2e6",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: 13,
+                      color: "#6c757d",
+                    }}
+                  >
+                    <span>dont livraison</span>
+                    <span>
+                      {formatCurrency(Number(quote.deliveryCost))}
+                    </span>
+                  </div>
+                )}
             </div>
-            {quote.deliveryCost != null &&
-              Number(quote.deliveryCost) > 0 && (
-                <div
-                  style={{
-                    marginTop: 14,
-                    paddingTop: 14,
-                    borderTop: "1px solid #dee2e6",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: 13,
-                    color: "#6c757d",
-                  }}
-                >
-                  <span>dont livraison</span>
-                  <span>
-                    {formatCurrency(Number(quote.deliveryCost))}
-                  </span>
-                </div>
-              )}
-          </div>
+          )}
         </div>
 
         {/* ── Footer / CGV ──────────────────────────────────────────────── */}

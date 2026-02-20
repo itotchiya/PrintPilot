@@ -30,7 +30,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (!quote) {
       return NextResponse.json({ error: "Devis introuvable" }, { status: 404 });
     }
-    if (user.role !== "ADMIN" && quote.userId !== user.id) {
+    const canAccessAnyQuote = ["ADMIN", "EMPLOYEE", "SUPER_ADMIN", "FOURNISSEUR"].includes(user.role);
+    if (!canAccessAnyQuote && quote.userId !== user.id) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
@@ -57,10 +58,11 @@ export async function PUT(request: NextRequest, { params }: Params) {
     if (!quote) {
       return NextResponse.json({ error: "Devis introuvable" }, { status: 404 });
     }
-    if (user.role !== "ADMIN" && quote.userId !== user.id) {
+    const canAccessAnyQuote = ["ADMIN", "EMPLOYEE", "SUPER_ADMIN", "FOURNISSEUR"].includes(user.role);
+    if (!canAccessAnyQuote && quote.userId !== user.id) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
-    if (body.status && user.role !== "ADMIN") {
+    if (body.status && !["ADMIN", "EMPLOYEE", "SUPER_ADMIN", "FOURNISSEUR"].includes(user.role)) {
       return NextResponse.json(
         { error: "Seul un administrateur peut modifier le statut" },
         { status: 403 }
@@ -98,7 +100,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     if (!quote) {
       return NextResponse.json({ error: "Devis introuvable" }, { status: 404 });
     }
-    if (user.role !== "ADMIN" && quote.userId !== user.id) {
+    const canAccessAnyQuote = ["ADMIN", "EMPLOYEE", "SUPER_ADMIN", "FOURNISSEUR"].includes(user.role);
+    if (!canAccessAnyQuote && quote.userId !== user.id) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 

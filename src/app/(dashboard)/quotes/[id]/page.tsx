@@ -98,6 +98,13 @@ interface Quote {
   selectedMethod: string | null;
   weightPerCopy: string | null;
   totalWeight: string | null;
+  fournisseurResults?: Array<{
+    fournisseurId: string;
+    fournisseurName: string;
+    digitalTotal: number;
+    offsetTotal: number;
+    deliveryCost?: number;
+  }> | null;
   createdAt: string;
   updatedAt: string;
   user?: { id: string; name: string; email: string };
@@ -263,8 +270,37 @@ export default function QuoteDetailPage() {
         )}
       </p>
 
-      {/* Price comparison */}
-      {(digitalPrice != null || offsetPrice != null) && (
+      {/* Multi-Fournisseur comparison (Acheteur) */}
+      {quote.fournisseurResults && quote.fournisseurResults.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">Comparaison par Fournisseur</h3>
+          {quote.fournisseurResults.map((r) => (
+            <Card key={r.fournisseurId}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">{r.fournisseurName}</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">Numérique</p>
+                  <p className="text-2xl font-semibold tabular-nums">
+                    {formatCurrency(r.digitalTotal)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Offset</p>
+                  <p className="text-2xl font-semibold tabular-nums">
+                    {formatCurrency(r.offsetTotal)}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Price comparison (single) */}
+      {!(quote.fournisseurResults && quote.fournisseurResults.length > 0) &&
+        (digitalPrice != null || offsetPrice != null) && (
         <div className="grid gap-4 sm:grid-cols-2">
           {/* Digital */}
           <Card
@@ -426,10 +462,14 @@ export default function QuoteDetailPage() {
                   value={String(quote.pagesCover)}
                 />
               )}
-              {quote.flapSize != null && (
+              {quote.productType === "BROCHURE" && (
                 <SpecRow
                   label="Taille du rabat"
-                  value={`${quote.flapSize} cm`}
+                  value={
+                    quote.flapSize != null && Number(quote.flapSize) > 0
+                      ? `${quote.flapSize} cm`
+                      : "Pas de rabat"
+                  }
                 />
               )}
               {quote.paperInteriorType && (

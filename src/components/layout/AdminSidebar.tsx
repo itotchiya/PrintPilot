@@ -39,14 +39,27 @@ import {
   Sun,
   Moon,
   Monitor,
+  Users,
+  ShieldCheck,
 } from "lucide-react";
 
 // ─── Navigation structure ─────────────────────────────────────────────────────
 
-const topLinks = [
+const topLinksAdmin = [
   { label: "Tableau de bord", href: "/admin", icon: LayoutDashboard, exact: true },
   { label: "Moteur de calcul", href: "/admin/config", icon: Calculator, exact: true },
   { label: "Devis com.", href: "/admin/quotes", icon: Briefcase },
+  { label: "Mes devis", href: "/quotes", icon: FileText, badge: true },
+  { label: "Nouveau devis", href: "/dashboard/new", icon: PlusCircle },
+];
+
+const topLinksSuperAdmin = [
+  { label: "Utilisateurs", href: "/admin/users", icon: Users },
+  { label: "Permissions", href: "/admin/permissions", icon: ShieldCheck },
+];
+
+const topLinksAcheteur = [
+  { label: "Tableau de bord", href: "/quotes", icon: LayoutDashboard, exact: true },
   { label: "Mes devis", href: "/quotes", icon: FileText, badge: true },
   { label: "Nouveau devis", href: "/dashboard/new", icon: PlusCircle },
 ];
@@ -67,10 +80,11 @@ const engineLinks = [
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 
-function SidebarLogo() {
+function SidebarLogo({ role }: { role?: string }) {
+  const href = role === "ACHETEUR" ? "/dashboard" : "/admin";
   return (
     <Link
-      href="/admin"
+      href={href}
       className="flex h-14 shrink-0 items-center border-b border-border px-5"
       aria-label="PrintPilot"
     >
@@ -123,9 +137,11 @@ function NavLink({
 function SidebarNav({
   pathname,
   onNavigate,
+  role,
 }: {
   pathname: string;
   onNavigate?: () => void;
+  role?: string;
 }) {
   const [quotesCount, setQuotesCount] = useState<number | null>(null);
 
@@ -141,6 +157,12 @@ function SidebarNav({
   const isActive = (href: string, exact = false) =>
     exact ? pathname === href : pathname.startsWith(href);
 
+  const isAcheteur = role === "ACHETEUR";
+  const isSuperAdmin = role === "SUPER_ADMIN";
+  const topLinks = isAcheteur
+    ? topLinksAcheteur
+    : [...topLinksAdmin, ...(isSuperAdmin ? topLinksSuperAdmin : [])];
+
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
       {/* Top group — Gestion */}
@@ -155,7 +177,7 @@ function SidebarNav({
               href={link.href}
               icon={link.icon}
               label={link.label}
-              active={isActive(link.href, "exact" in link && link.exact)}
+              active={isActive(link.href, Boolean("exact" in link && link.exact))}
               onClick={onNavigate}
               badge={"badge" in link && link.badge ? quotesCount : undefined}
             />
@@ -163,24 +185,26 @@ function SidebarNav({
         </ul>
       </div>
 
-      {/* Bottom group — Moteur de calcul */}
-      <div>
-        <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-          Moteur de calcul
-        </p>
-        <ul className="space-y-0.5">
-          {engineLinks.map((link) => (
-            <NavLink
-              key={link.href}
-              href={link.href}
-              icon={link.icon}
-              label={link.label}
-              active={isActive(link.href)}
-              onClick={onNavigate}
-            />
-          ))}
-        </ul>
-      </div>
+      {/* Bottom group — Moteur de calcul (hidden for Acheteur) */}
+      {!isAcheteur && (
+        <div>
+          <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+            Moteur de calcul
+          </p>
+          <ul className="space-y-0.5">
+            {engineLinks.map((link) => (
+              <NavLink
+                key={link.href}
+                href={link.href}
+                icon={link.icon}
+                label={link.label}
+                active={isActive(link.href)}
+                onClick={onNavigate}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
     </nav>
   );
 }
@@ -204,8 +228,11 @@ function SidebarProfile() {
     .slice(0, 2);
 
   const roleLabel: Record<string, string> = {
+    SUPER_ADMIN: "Super Admin",
     ADMIN: "Administrateur",
     EMPLOYEE: "Employé",
+    FOURNISSEUR: "Fournisseur",
+    ACHETEUR: "Acheteur",
     CLIENT: "Client",
   };
 
@@ -301,11 +328,13 @@ function SidebarProfile() {
 export function AdminSidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const { data: session } = useSession();
+  const role = (session?.user as { role?: string } | undefined)?.role;
 
   const sidebarContent = (
     <div className="flex h-full flex-col">
-      <SidebarLogo />
-      <SidebarNav pathname={pathname} onNavigate={() => setIsOpen(false)} />
+      <SidebarLogo role={role} />
+      <SidebarNav pathname={pathname} onNavigate={() => setIsOpen(false)} role={role} />
       <SidebarProfile />
     </div>
   );

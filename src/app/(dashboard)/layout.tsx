@@ -10,10 +10,15 @@ export default async function DashboardLayout({
 }) {
   const session = await getServerSession(authOptions);
   const role = (session?.user as { role?: string } | undefined)?.role;
-  const isAdminOrEmployee = role === "ADMIN" || role === "EMPLOYEE";
+  const useAdminSidebar =
+    role === "SUPER_ADMIN" ||
+    role === "FOURNISSEUR" ||
+    role === "ACHETEUR" ||
+    role === "ADMIN" ||
+    role === "EMPLOYEE";
 
-  // Admins/employees see the same sidebar layout as /admin/* pages
-  if (isAdminOrEmployee) {
+  // SuperAdmin, Fournisseur, Acheteur (and legacy Admin/Employee) see the same sidebar layout
+  if (useAdminSidebar) {
     return (
       <div className="flex min-h-screen bg-muted/30">
         <AdminSidebar />

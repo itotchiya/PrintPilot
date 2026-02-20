@@ -79,6 +79,15 @@ export interface DigitalBreakdown {
   total: number;
 }
 
+/** Exported for engine: get format divisors for calculation snapshot formulas. */
+export function getClickDivisorForFormat(
+  divisors: FormatClickDivisor[],
+  widthCm: number,
+  heightCm: number
+): { recto: number; rv: number } {
+  return findClickDivisor(divisors, widthCm, heightCm);
+}
+
 function findClickDivisor(divisors: FormatClickDivisor[], widthCm: number, heightCm: number): { recto: number; rv: number } {
   // Match by approximate dimensions
   const formatKey = `${widthCm}x${heightCm}`;
@@ -108,6 +117,22 @@ function calcClicksCover(divisors: FormatClickDivisor[], widthCm: number, height
   const { rv } = findClickDivisor(divisors, widthCm, heightCm);
   // Cover = 4 pages = 2 sheets recto-verso
   return (4 * quantity) / (rv * 2);
+}
+
+/** Exported for engine: get click counts used in digital pricing (for calculation snapshot). */
+export function getDigitalClicks(input: DigitalInput): { clicksInterior: number; clicksCover: number; clicksFlat?: number } {
+  const { widthCm, heightCm, pagesInterior, quantity, hasCover, rectoVerso, clickDivisors } = input;
+  if (hasCover) {
+    return {
+      clicksInterior: calcClicksInterior(clickDivisors, widthCm, heightCm, pagesInterior, quantity),
+      clicksCover: calcClicksCover(clickDivisors, widthCm, heightCm, quantity),
+    };
+  }
+  return {
+    clicksInterior: calcClicksFlat(clickDivisors, widthCm, heightCm, quantity, rectoVerso),
+    clicksCover: 0,
+    clicksFlat: calcClicksFlat(clickDivisors, widthCm, heightCm, quantity, rectoVerso),
+  };
 }
 
 function calcClickCost(clicks: number, platesPerSide: number, config: DigitalConfig): number {

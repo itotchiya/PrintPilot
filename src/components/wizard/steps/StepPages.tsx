@@ -53,7 +53,13 @@ export function StepPages({ data, updateData }: StepProps) {
           <Label>Type de reliure *</Label>
           <Select
             value={data.bindingTypeId ?? ""}
-            onValueChange={(v) => updateData({ bindingTypeId: v })}
+            onValueChange={(v) => {
+              const b = bindings.find((x) => x.id === v);
+              updateData({
+                bindingTypeId: v,
+                bindingTypeName: b?.name ?? null,
+              });
+            }}
           >
             <SelectTrigger>
               <SelectValue placeholder="Choisir la reliure…" />

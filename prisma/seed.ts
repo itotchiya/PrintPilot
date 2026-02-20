@@ -54,13 +54,26 @@ async function main() {
   await prisma.marginConfig.deleteMany();
   await prisma.machineFormat.deleteMany();
   await prisma.formatClickDivisor.deleteMany();
+  await prisma.acheteurFournisseurAccess.deleteMany();
   await prisma.quote.deleteMany();
   await prisma.user.deleteMany();
 
   console.log("✅ Database cleaned");
 
-  // ── 1. Admin User ────────────────────────────────────────────────────────
+  // ── 1. SuperAdmin + Admin (Fournisseur) users ─────────────────────────────
   const passwordHash = await bcrypt.hash("admin123", 12);
+  const superAdmin = await prisma.user.upsert({
+    where: { email: "superadmin@printpilot.fr" },
+    update: {},
+    create: {
+      name: "Super Admin PrintPilot",
+      email: "superadmin@printpilot.fr",
+      passwordHash,
+      role: "SUPER_ADMIN",
+    },
+  });
+  console.log(`👤 SuperAdmin user created: ${superAdmin.email}`);
+
   const admin = await prisma.user.upsert({
     where: { email: "admin@printpilot.fr" },
     update: {},
@@ -68,10 +81,35 @@ async function main() {
       name: "Admin PrintPilot",
       email: "admin@printpilot.fr",
       passwordHash,
-      role: "ADMIN",
+      role: "FOURNISSEUR",
     },
   });
-  console.log(`👤 Admin user created: ${admin.email}`);
+  console.log(`👤 Fournisseur (admin) user created: ${admin.email}`);
+
+  const acheteur = await prisma.user.upsert({
+    where: { email: "acheteur@printpilot.fr" },
+    update: {},
+    create: {
+      name: "Acheteur PrintPilot",
+      email: "acheteur@printpilot.fr",
+      passwordHash,
+      role: "ACHETEUR",
+    },
+  });
+  console.log(`👤 Acheteur user created: ${acheteur.email}`);
+
+  // Link Acheteur to Fournisseur so they can compare quotes from this supplier
+  await prisma.acheteurFournisseurAccess.upsert({
+    where: {
+      acheteurId_fournisseurId: { acheteurId: acheteur.id, fournisseurId: admin.id },
+    },
+    update: {},
+    create: {
+      acheteurId: acheteur.id,
+      fournisseurId: admin.id,
+    },
+  });
+  console.log(`🔗 Acheteur–Fournisseur access created`);
 
   // ── 2. Paper Types ───────────────────────────────────────────────────────
   const paperTypesData = [
@@ -88,11 +126,9 @@ async function main() {
 
   const paperTypes: Record<string, { id: string }> = {};
   for (const pt of paperTypesData) {
-    paperTypes[pt.name] = await prisma.paperType.upsert({
-      where: { name: pt.name },
-      update: {},
-      create: pt,
-    });
+    let row = await prisma.paperType.findFirst({ where: { fournisseurId: null, name: pt.name } });
+    if (!row) row = await prisma.paperType.create({ data: { ...pt } });
+    paperTypes[pt.name] = row;
   }
   console.log(`📄 ${Object.keys(paperTypes).length} paper types created`);
 
@@ -184,11 +220,8 @@ async function main() {
   ];
 
   for (const fp of formatPresetsData) {
-    await prisma.formatPreset.upsert({
-      where: { name: fp.name },
-      update: {},
-      create: fp,
-    });
+    const row = await prisma.formatPreset.findFirst({ where: { fournisseurId: null, name: fp.name } });
+    if (!row) await prisma.formatPreset.create({ data: { ...fp } });
   }
   console.log(`📐 ${formatPresetsData.length} format presets created`);
 
@@ -201,11 +234,8 @@ async function main() {
   ];
 
   for (const cm of colorModesData) {
-    await prisma.colorMode.upsert({
-      where: { name: cm.name },
-      update: {},
-      create: cm,
-    });
+    const row = await prisma.colorMode.findFirst({ where: { fournisseurId: null, name: cm.name } });
+    if (!row) await prisma.colorMode.create({ data: { ...cm } });
   }
   console.log(`🎨 ${colorModesData.length} color modes created`);
 
@@ -219,11 +249,9 @@ async function main() {
 
   const bindingTypes: Record<string, { id: string }> = {};
   for (const bt of bindingTypesData) {
-    bindingTypes[bt.name] = await prisma.bindingType.upsert({
-      where: { name: bt.name },
-      update: {},
-      create: bt,
-    });
+    let row = await prisma.bindingType.findFirst({ where: { fournisseurId: null, name: bt.name } });
+    if (!row) row = await prisma.bindingType.create({ data: { ...bt } });
+    bindingTypes[bt.name] = row;
   }
   console.log(`📎 ${Object.keys(bindingTypes).length} binding types created`);
 
@@ -310,11 +338,8 @@ async function main() {
 
   let foldCostCount = 0;
   for (const ft of foldTypesData) {
-    const foldType = await prisma.foldType.upsert({
-      where: { name: ft.name },
-      update: {},
-      create: ft,
-    });
+    let foldType = await prisma.foldType.findFirst({ where: { fournisseurId: null, name: ft.name } });
+    if (!foldType) foldType = await prisma.foldType.create({ data: { ...ft } });
 
     for (const fc of foldCostsData) {
       await prisma.foldCost.upsert({
@@ -330,11 +355,8 @@ async function main() {
   // ── 8. Lamination Modes ──────────────────────────────────────────────────
   const laminationModes = ["Rien", "Pelliculage Recto", "Pelliculage Recto Verso"];
   for (const name of laminationModes) {
-    await prisma.laminationMode.upsert({
-      where: { name },
-      update: {},
-      create: { name },
-    });
+    const row = await prisma.laminationMode.findFirst({ where: { fournisseurId: null, name } });
+    if (!row) await prisma.laminationMode.create({ data: { name } });
   }
   console.log(`✨ ${laminationModes.length} lamination modes created`);
 
@@ -357,11 +379,8 @@ async function main() {
 
   let lamTierCount = 0;
   for (const lf of laminationFinishesData) {
-    const finish = await prisma.laminationFinish.upsert({
-      where: { name: lf.name },
-      update: {},
-      create: lf,
-    });
+    let finish = await prisma.laminationFinish.findFirst({ where: { fournisseurId: null, name: lf.name } });
+    if (!finish) finish = await prisma.laminationFinish.create({ data: { ...lf } });
 
     for (const tier of laminationDigitalTiers) {
       await prisma.laminationPriceTier.create({
@@ -383,11 +402,8 @@ async function main() {
   ];
 
   for (const pkg of packagingData) {
-    await prisma.packagingOption.upsert({
-      where: { name: pkg.name },
-      update: {},
-      create: pkg,
-    });
+    const row = await prisma.packagingOption.findFirst({ where: { fournisseurId: null, name: pkg.name } });
+    if (!row) await prisma.packagingOption.create({ data: { ...pkg } });
   }
   console.log(`📦 ${packagingData.length} packaging options created`);
 
@@ -513,16 +529,10 @@ async function main() {
   console.log(`🗺️  ${departmentsRaw.length} departments created`);
 
   // ── 12. Carriers + Delivery Rates ────────────────────────────────────────
-  const franceExpress = await prisma.carrier.upsert({
-    where: { name: "France EXPRESS" },
-    update: {},
-    create: { name: "France EXPRESS", active: true },
-  });
-  const tnt = await prisma.carrier.upsert({
-    where: { name: "TNT" },
-    update: {},
-    create: { name: "TNT", active: true },
-  });
+  let franceExpress = await prisma.carrier.findFirst({ where: { fournisseurId: null, name: "France EXPRESS" } });
+  if (!franceExpress) franceExpress = await prisma.carrier.create({ data: { name: "France EXPRESS", active: true } });
+  let tnt = await prisma.carrier.findFirst({ where: { fournisseurId: null, name: "TNT" } });
+  if (!tnt) tnt = await prisma.carrier.create({ data: { name: "TNT", active: true } });
   console.log(`🚚 2 carriers created (France EXPRESS, TNT)`);
 
   // France EXPRESS rates: [maxWeightKg, zone1, zone2, zone3, zone4, zone5]
@@ -587,11 +597,8 @@ async function main() {
   ];
 
   for (const cfg of offsetConfigData) {
-    await prisma.offsetConfig.upsert({
-      where: { key: cfg.key },
-      update: {},
-      create: cfg,
-    });
+    const row = await prisma.offsetConfig.findFirst({ where: { fournisseurId: null, key: cfg.key } });
+    if (!row) await prisma.offsetConfig.create({ data: { ...cfg } });
   }
   console.log(`⚙️  ${offsetConfigData.length} offset config entries created`);
 
@@ -606,11 +613,8 @@ async function main() {
   ];
 
   for (const cfg of digitalConfigData) {
-    await prisma.digitalConfig.upsert({
-      where: { key: cfg.key },
-      update: {},
-      create: cfg,
-    });
+    const row = await prisma.digitalConfig.findFirst({ where: { fournisseurId: null, key: cfg.key } });
+    if (!row) await prisma.digitalConfig.create({ data: { ...cfg } });
   }
   console.log(`⚙️  ${digitalConfigData.length} digital config entries created`);
 
@@ -622,11 +626,8 @@ async function main() {
   ];
 
   for (const cfg of marginConfigData) {
-    await prisma.marginConfig.upsert({
-      where: { key: cfg.key },
-      update: {},
-      create: cfg,
-    });
+    const row = await prisma.marginConfig.findFirst({ where: { fournisseurId: null, key: cfg.key } });
+    if (!row) await prisma.marginConfig.create({ data: { ...cfg } });
   }
   console.log(`💰 ${marginConfigData.length} margin config entries created`);
 
@@ -641,11 +642,8 @@ async function main() {
   ];
 
   for (const mf of machineFormatsData) {
-    await prisma.machineFormat.upsert({
-      where: { name: mf.name },
-      update: {},
-      create: mf,
-    });
+    const row = await prisma.machineFormat.findFirst({ where: { fournisseurId: null, name: mf.name } });
+    if (!row) await prisma.machineFormat.create({ data: { ...mf } });
   }
   console.log(`🖨️  ${machineFormatsData.length} machine formats created`);
 
@@ -661,13 +659,216 @@ async function main() {
   ];
 
   for (const fcd of formatClickDivisorsData) {
-    await prisma.formatClickDivisor.upsert({
-      where: { formatName: fcd.formatName },
-      update: {},
-      create: fcd,
-    });
+    const row = await prisma.formatClickDivisor.findFirst({ where: { fournisseurId: null, formatName: fcd.formatName } });
+    if (!row) await prisma.formatClickDivisor.create({ data: { ...fcd } });
   }
   console.log(`🔢 ${formatClickDivisorsData.length} format click divisors created`);
+
+  // ── 18. Copy default config to Fournisseur (demo placeholder) ─────────────
+  const fid = admin.id;
+  const copyScalar = (v: unknown): number =>
+    typeof v === "object" && v !== null && "toNumber" in v ? (v as { toNumber: () => number }).toNumber() : Number(v);
+
+  const defaultPaperTypes = await prisma.paperType.findMany({ where: { fournisseurId: null }, include: { grammages: true } });
+  const paperTypeIdMap: Record<string, string> = {};
+  for (const pt of defaultPaperTypes) {
+    const created = await prisma.paperType.create({
+      data: { fournisseurId: fid, name: pt.name, category: pt.category, active: pt.active, sortOrder: pt.sortOrder },
+    });
+    paperTypeIdMap[pt.id] = created.id;
+    for (const g of pt.grammages) {
+      await prisma.paperGrammage.create({
+        data: {
+          paperTypeId: created.id,
+          grammage: g.grammage,
+          pricePerKg: copyScalar(g.pricePerKg) ?? g.pricePerKg,
+          weightPer1000Sheets: g.weightPer1000Sheets != null ? copyScalar(g.weightPer1000Sheets) : null,
+          availableForDosCarre: g.availableForDosCarre,
+        },
+      });
+    }
+  }
+
+  const defaultFormatPresets = await prisma.formatPreset.findMany({ where: { fournisseurId: null } });
+  for (const fp of defaultFormatPresets) {
+    await prisma.formatPreset.create({
+      data: {
+        fournisseurId: fid,
+        name: fp.name,
+        widthCm: copyScalar(fp.widthCm),
+        heightCm: copyScalar(fp.heightCm),
+        orientation: fp.orientation,
+        productTypes: fp.productTypes as object,
+        active: fp.active,
+      },
+    });
+  }
+
+  const defaultColorModes = await prisma.colorMode.findMany({ where: { fournisseurId: null } });
+  for (const cm of defaultColorModes) {
+    await prisma.colorMode.create({
+      data: {
+        fournisseurId: fid,
+        name: cm.name,
+        platesPerSide: cm.platesPerSide,
+        hasVarnish: cm.hasVarnish,
+        clickMultiplier: copyScalar(cm.clickMultiplier),
+        active: cm.active,
+      },
+    });
+  }
+
+  const defaultBindingTypes = await prisma.bindingType.findMany({
+    where: { fournisseurId: null },
+    include: { digitalPriceTiers: true, offsetPriceTiers: true },
+  });
+  const bindingTypeIdMap: Record<string, string> = {};
+  for (const bt of defaultBindingTypes) {
+    const created = await prisma.bindingType.create({
+      data: { fournisseurId: fid, name: bt.name, minPages: bt.minPages, maxPages: bt.maxPages, active: bt.active },
+    });
+    bindingTypeIdMap[bt.id] = created.id;
+    for (const t of bt.digitalPriceTiers) {
+      await prisma.bindingPriceTierDigital.create({
+        data: {
+          bindingTypeId: created.id,
+          pageRangeMin: t.pageRangeMin,
+          pageRangeMax: t.pageRangeMax,
+          qtyMin: t.qtyMin,
+          qtyMax: t.qtyMax,
+          perUnitCost: copyScalar(t.perUnitCost),
+          setupCost: copyScalar(t.setupCost),
+        },
+      });
+    }
+    for (const t of bt.offsetPriceTiers) {
+      await prisma.bindingPriceTierOffset.create({
+        data: {
+          bindingTypeId: created.id,
+          cahiersCount: t.cahiersCount,
+          calageCost: copyScalar(t.calageCost),
+          roulagePer1000: copyScalar(t.roulagePer1000),
+        },
+      });
+    }
+  }
+
+  const defaultFoldTypes = await prisma.foldType.findMany({ where: { fournisseurId: null }, include: { costs: true } });
+  const foldTypeIdMap: Record<string, string> = {};
+  for (const ft of defaultFoldTypes) {
+    const created = await prisma.foldType.create({
+      data: { fournisseurId: fid, name: ft.name, maxFolds: ft.maxFolds, canBeSecondary: ft.canBeSecondary, active: ft.active },
+    });
+    foldTypeIdMap[ft.id] = created.id;
+    for (const fc of ft.costs) {
+      await prisma.foldCost.create({
+        data: { foldTypeId: created.id, numFolds: fc.numFolds, cost: copyScalar(fc.cost) },
+      });
+    }
+  }
+
+  const defaultLaminationModes = await prisma.laminationMode.findMany({ where: { fournisseurId: null } });
+  for (const lm of defaultLaminationModes) {
+    await prisma.laminationMode.create({ data: { fournisseurId: fid, name: lm.name } });
+  }
+
+  const defaultLaminationFinishes = await prisma.laminationFinish.findMany({
+    where: { fournisseurId: null },
+    include: { digitalPriceTiers: true },
+  });
+  for (const lf of defaultLaminationFinishes) {
+    const created = await prisma.laminationFinish.create({
+      data: {
+        fournisseurId: fid,
+        name: lf.name,
+        offsetPricePerM2: lf.offsetPricePerM2 != null ? copyScalar(lf.offsetPricePerM2) : null,
+        offsetCalageForfait: lf.offsetCalageForfait != null ? copyScalar(lf.offsetCalageForfait) : null,
+        offsetMinimumBilling: lf.offsetMinimumBilling != null ? copyScalar(lf.offsetMinimumBilling) : null,
+        active: lf.active,
+      },
+    });
+    for (const t of lf.digitalPriceTiers) {
+      await prisma.laminationPriceTier.create({
+        data: {
+          finishId: created.id,
+          qtyMin: t.qtyMin,
+          qtyMax: t.qtyMax,
+          pricePerSheet: copyScalar(t.pricePerSheet),
+          setupCost: copyScalar(t.setupCost),
+        },
+      });
+    }
+  }
+
+  const defaultPackaging = await prisma.packagingOption.findMany({ where: { fournisseurId: null } });
+  for (const pkg of defaultPackaging) {
+    await prisma.packagingOption.create({
+      data: {
+        fournisseurId: fid,
+        name: pkg.name,
+        type: pkg.type,
+        costPerUnit: copyScalar(pkg.costPerUnit),
+        costPerOrder: copyScalar(pkg.costPerOrder),
+        appliesTo: pkg.appliesTo as object,
+        active: pkg.active,
+      },
+    });
+  }
+
+  const defaultCarriers = await prisma.carrier.findMany({ where: { fournisseurId: null }, include: { deliveryRates: true } });
+  for (const c of defaultCarriers) {
+    const created = await prisma.carrier.create({ data: { fournisseurId: fid, name: c.name, active: c.active } });
+    for (const r of c.deliveryRates) {
+      await prisma.deliveryRate.create({
+        data: {
+          carrierId: created.id,
+          zone: r.zone,
+          maxWeightKg: copyScalar(r.maxWeightKg),
+          price: copyScalar(r.price),
+        },
+      });
+    }
+  }
+
+  const defaultOffsetConfig = await prisma.offsetConfig.findMany({ where: { fournisseurId: null } });
+  for (const c of defaultOffsetConfig) {
+    await prisma.offsetConfig.create({
+      data: { fournisseurId: fid, key: c.key, value: copyScalar(c.value), unit: c.unit ?? undefined, description: c.description ?? undefined },
+    });
+  }
+  const defaultDigitalConfig = await prisma.digitalConfig.findMany({ where: { fournisseurId: null } });
+  for (const c of defaultDigitalConfig) {
+    await prisma.digitalConfig.create({
+      data: { fournisseurId: fid, key: c.key, value: copyScalar(c.value), unit: c.unit ?? undefined, description: c.description ?? undefined },
+    });
+  }
+  const defaultMarginConfig = await prisma.marginConfig.findMany({ where: { fournisseurId: null } });
+  for (const c of defaultMarginConfig) {
+    await prisma.marginConfig.create({
+      data: { fournisseurId: fid, key: c.key, value: copyScalar(c.value), unit: c.unit ?? undefined, description: c.description ?? undefined },
+    });
+  }
+
+  const defaultMachineFormats = await prisma.machineFormat.findMany({ where: { fournisseurId: null } });
+  for (const mf of defaultMachineFormats) {
+    await prisma.machineFormat.create({
+      data: { fournisseurId: fid, name: mf.name, widthCm: mf.widthCm, heightCm: mf.heightCm, isDefault: mf.isDefault },
+    });
+  }
+
+  const defaultFormatClickDivisors = await prisma.formatClickDivisor.findMany({ where: { fournisseurId: null } });
+  for (const fcd of defaultFormatClickDivisors) {
+    await prisma.formatClickDivisor.create({
+      data: {
+        fournisseurId: fid,
+        formatName: fcd.formatName,
+        divisorRecto: fcd.divisorRecto,
+        divisorRectoVerso: fcd.divisorRectoVerso,
+      },
+    });
+  }
+
+  console.log(`📋 Default config copied to Fournisseur (${admin.email}) as demo placeholder`);
 
   console.log("\n🎉 Seed completed successfully!");
 }

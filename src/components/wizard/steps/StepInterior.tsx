@@ -87,12 +87,14 @@ export function StepInterior({ data, updateData }: StepProps) {
             <Label>Type de papier</Label>
             <Select
               value={data.paperInteriorTypeId ?? ""}
-              onValueChange={(id) =>
+              onValueChange={(id) => {
+                const pt = filteredTypes.find((p) => p.id === id);
                 updateData({
                   paperInteriorTypeId: id,
                   paperInteriorGrammage: null,
-                })
-              }
+                  paperInteriorTypeName: pt?.name ?? null,
+                });
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Choisir le papier…" />
@@ -138,7 +140,13 @@ export function StepInterior({ data, updateData }: StepProps) {
         <Label>Couleurs — Intérieur *</Label>
         <Select
           value={data.colorModeInteriorId ?? ""}
-          onValueChange={(v) => updateData({ colorModeInteriorId: v })}
+          onValueChange={(v) => {
+            const mode = colorModes.find((c) => c.id === v);
+            updateData({
+              colorModeInteriorId: v,
+              colorModeInteriorName: mode?.name ?? null,
+            });
+          }}
         >
           <SelectTrigger>
             <SelectValue placeholder="Choisir le mode couleur…" />

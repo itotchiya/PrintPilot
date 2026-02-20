@@ -1,6 +1,24 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+/** Categories that are scoped by fournisseurId (default config when null). Department (delivery) is global. */
+const SCOPED_CATEGORIES = new Set([
+  "paper",
+  "formats",
+  "colors",
+  "binding",
+  "folds",
+  "lamination",
+  "packaging",
+  "offset",
+  "digital",
+  "margins",
+]);
+
+export function isScopedCategory(category: string): boolean {
+  return SCOPED_CATEGORIES.has(category);
+}
+
 export const CATEGORY_CONFIG: Record<
   string,
   {
@@ -55,6 +73,18 @@ export const CATEGORY_CONFIG: Record<
 export function getModel(modelName: string): any {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (prisma as Record<string, any>)[modelName];
+}
+
+/** Call after a Fournisseur successfully creates/updates/deletes their config (hides demo alert). Never throws. */
+export async function markFournisseurConfigCustomized(userId: string) {
+  try {
+    await prisma.user.updateMany({
+      where: { id: userId, configCustomizedAt: null },
+      data: { configCustomizedAt: new Date() },
+    });
+  } catch {
+    // Column may not exist yet (migration not run); don't break config save
+  }
 }
 
 export function errorResponse(error: unknown) {

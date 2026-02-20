@@ -30,8 +30,9 @@ export async function GET(request: NextRequest) {
   const skip = (page - 1) * limit;
 
   try {
+    const canSeeAllQuotes = ["ADMIN", "EMPLOYEE", "SUPER_ADMIN", "FOURNISSEUR"].includes(user.role);
     const where = {
-      ...(user.role !== "ADMIN" && { userId: user.id }),
+      ...(!canSeeAllQuotes && { userId: user.id }),
       ...(status && { status: status as never }),
       ...(productType && { productType: productType as never }),
     };
@@ -71,6 +72,16 @@ export async function POST(request: NextRequest) {
       deliveryCost?: number;
       weightPerCopyGrams?: number;
       selectedMethod?: string;
+      fournisseurResults?: Array<{
+        fournisseurId: string;
+        fournisseurName: string;
+        digitalTotal: number;
+        offsetTotal: number;
+        digitalBreakdown?: unknown;
+        offsetBreakdown?: unknown;
+        deliveryCost?: number;
+        selectedMethod?: string;
+      }>;
     };
 
     if (!body.productType || !body.quantity || !body.format) {
@@ -159,6 +170,9 @@ export async function POST(request: NextRequest) {
           body.weightPerCopyGrams && body.quantity
             ? (body.weightPerCopyGrams * body.quantity) / 1000
             : null,
+        fournisseurResults: body.fournisseurResults
+          ? (JSON.parse(JSON.stringify(body.fournisseurResults)) as never)
+          : undefined,
       },
     });
 

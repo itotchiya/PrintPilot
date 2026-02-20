@@ -40,18 +40,25 @@ export interface QuoteInput {
   paperInteriorGrammage: number | null;
   paperCoverTypeId: string | null;
   paperCoverGrammage: number | null;
-  // Step 5
+  paperInteriorTypeName: string | null;
+  paperCoverTypeName: string | null;
+  // Step 5 (display names for preview / save)
   colorModeInteriorId: string | null;
   colorModeCoverId: string | null;
+  colorModeInteriorName: string | null;
+  colorModeCoverName: string | null;
   rectoVerso: boolean;
   // Step 6
   bindingTypeId: string | null;
+  bindingTypeName: string | null;
   foldTypeId: string | null;
+  foldTypeName: string | null;
   foldCount: number;
   secondaryFoldType: "Pli Croise" | null;
   secondaryFoldCount: number;
   laminationMode: "Rien" | "Pelliculage Recto" | "Pelliculage Recto Verso";
   laminationFinishId: string | null;
+  laminationFinishName: string | null;
   // Step 7
   packaging: QuotePackaging;
   deliveryPoints: QuoteDeliveryPoint[];
@@ -73,16 +80,23 @@ export const EMPTY_QUOTE_INPUT: QuoteInput = {
   paperInteriorGrammage: null,
   paperCoverTypeId: null,
   paperCoverGrammage: null,
+  paperInteriorTypeName: null,
+  paperCoverTypeName: null,
   colorModeInteriorId: null,
   colorModeCoverId: null,
+  colorModeInteriorName: null,
+  colorModeCoverName: null,
   rectoVerso: true,
   bindingTypeId: null,
+  bindingTypeName: null,
   foldTypeId: null,
+  foldTypeName: null,
   foldCount: 1,
   secondaryFoldType: null,
   secondaryFoldCount: 0,
   laminationMode: "Rien",
   laminationFinishId: null,
+  laminationFinishName: null,
   packaging: { cartons: false, film: false, elastiques: false, crystalBoxQty: 0 },
   deliveryPoints: [{ copies: 0, departmentCode: "", departmentName: "", zone: 0, hayon: false }],
   clientName: "",
