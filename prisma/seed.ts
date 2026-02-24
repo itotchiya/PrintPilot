@@ -2,6 +2,8 @@ import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import bcrypt from "bcryptjs";
+import fs from "fs";
+import path from "path";
 import "dotenv/config";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -33,6 +35,8 @@ const WEIGHT_MAP: Record<number, number> = {
 async function main() {
   console.log("🗑️  Cleaning database…");
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (prisma as any).transportRateByDept.deleteMany();
   await prisma.deliveryRate.deleteMany();
   await prisma.carrier.deleteMany();
   await prisma.department.deleteMany();
@@ -118,10 +122,11 @@ async function main() {
     { name: "Brillant", category: "BOTH" as const, sortOrder: 3 },
     { name: "Offset", category: "BOTH" as const, sortOrder: 4 },
     { name: "Recycle", category: "BOTH" as const, sortOrder: 5 },
-    { name: "Bouffant Munken Blanc", category: "INTERIOR" as const, sortOrder: 6 },
-    { name: "Bouffant Munken Creme", category: "INTERIOR" as const, sortOrder: 7 },
-    { name: "Bouffant Blanc", category: "INTERIOR" as const, sortOrder: 8 },
-    { name: "Carte 1 face", category: "COVER" as const, sortOrder: 9 },
+    { name: "Autre", category: "BOTH" as const, sortOrder: 6 },
+    { name: "Bouffant Munken Blanc", category: "INTERIOR" as const, sortOrder: 7 },
+    { name: "Bouffant Munken Creme", category: "INTERIOR" as const, sortOrder: 8 },
+    { name: "Bouffant Blanc", category: "INTERIOR" as const, sortOrder: 9 },
+    { name: "Carte 1 face", category: "COVER" as const, sortOrder: 10 },
   ];
 
   const paperTypes: Record<string, { id: string }> = {};
@@ -135,14 +140,19 @@ async function main() {
   // ── 3. Paper Grammages ───────────────────────────────────────────────────
   type GrammageEntry = { grammage: number; pricePerKg: number };
 
-  const standardGrammages: GrammageEntry[] = [80, 90, 100, 115, 130, 135, 150, 170, 200, 250, 300, 350, 400].map(
+  const standardGrammages: GrammageEntry[] = [80, 90, 100, 115, 130, 135, 150, 170, 200, 250, 300, 350].map(
     (g) => ({ grammage: g, pricePerKg: 1.0 })
   );
+  // XLSM Tableau_papier: 400g couché = 1.63 EUR/kg (premium grammage surcharge)
+  const standardGrammagesWith400g: GrammageEntry[] = [
+    ...standardGrammages,
+    { grammage: 400, pricePerKg: 1.63 },
+  ];
 
   const grammagesByPaper: Record<string, GrammageEntry[]> = {
-    "Couche Satin": standardGrammages,
-    "Couche Mat": standardGrammages,
-    Brillant: standardGrammages,
+    "Couche Satin": standardGrammagesWith400g,
+    "Couche Mat": standardGrammagesWith400g,
+    Brillant: standardGrammagesWith400g,
     Recycle: [
       { grammage: 70, pricePerKg: 1.4 },
       { grammage: 80, pricePerKg: 1.4 },
@@ -168,6 +178,27 @@ async function main() {
       { grammage: 240, pricePerKg: 1.29 },
       { grammage: 300, pricePerKg: 1.29 },
       { grammage: 350, pricePerKg: 1.29 },
+    ],
+    // "Autre" = generic/non-standard paper — covers both interior (70–135) and cover (115–400) usage
+    Autre: [
+      { grammage: 70, pricePerKg: 1.0 },
+      { grammage: 80, pricePerKg: 1.0 },
+      { grammage: 90, pricePerKg: 1.0 },
+      { grammage: 100, pricePerKg: 1.0 },
+      { grammage: 110, pricePerKg: 1.0 },
+      { grammage: 115, pricePerKg: 1.0 },
+      { grammage: 120, pricePerKg: 1.0 },
+      { grammage: 130, pricePerKg: 1.0 },
+      { grammage: 135, pricePerKg: 1.0 },
+      { grammage: 150, pricePerKg: 1.0 },
+      { grammage: 170, pricePerKg: 1.0 },
+      { grammage: 200, pricePerKg: 1.0 },
+      { grammage: 220, pricePerKg: 1.0 },
+      { grammage: 240, pricePerKg: 1.0 },
+      { grammage: 250, pricePerKg: 1.0 },
+      { grammage: 300, pricePerKg: 1.0 },
+      { grammage: 350, pricePerKg: 1.0 },
+      { grammage: 400, pricePerKg: 1.0 },
     ],
     "Bouffant Munken Blanc": [
       { grammage: 80, pricePerKg: 2.4 },
@@ -228,7 +259,7 @@ async function main() {
   // ── 5. Color Modes ───────────────────────────────────────────────────────
   const colorModesData = [
     { name: "Quadrichromie", platesPerSide: 4, hasVarnish: false, clickMultiplier: 1.0 },
-    { name: "Quadrichromie + Vernis Machine", platesPerSide: 4, hasVarnish: true, clickMultiplier: 1.0 },
+    { name: "Quadrichromie + Vernis Machine", platesPerSide: 5, hasVarnish: true, clickMultiplier: 1.0 },
     { name: "Bichromie", platesPerSide: 2, hasVarnish: false, clickMultiplier: 0.5 },
     { name: "Noir", platesPerSide: 1, hasVarnish: false, clickMultiplier: 0.25 },
   ];
@@ -306,6 +337,22 @@ async function main() {
     { pageRangeMin: 152, pageRangeMax: 280, qtyMin: 500, qtyMax: 99999, perUnitCost: 0.56, setupCost: 80 },
   ];
 
+  // Piqure (2 points métal) — digital price tiers
+  // Source: Tableau_Façonnage_Num.csv lines 15-20
+  const piqureDigitalTiers: BindingTier[] = [
+    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 25, qtyMax: 50, perUnitCost: 0.14, setupCost: 35 },
+    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 50, qtyMax: 100, perUnitCost: 0.14, setupCost: 35 },
+    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 100, qtyMax: 200, perUnitCost: 0.12, setupCost: 35 },
+    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 200, qtyMax: 300, perUnitCost: 0.10, setupCost: 35 },
+    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 300, qtyMax: 500, perUnitCost: 0.085, setupCost: 35 },
+    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 500, qtyMax: 99999, perUnitCost: 0.07, setupCost: 35 },
+  ];
+
+  for (const tier of piqureDigitalTiers) {
+    await prisma.bindingPriceTierDigital.create({
+      data: { bindingTypeId: bindingTypes["Piqure"].id, ...tier },
+    });
+  }
   for (const tier of dosCarreColleTiers) {
     await prisma.bindingPriceTierDigital.create({
       data: { bindingTypeId: bindingTypes["Dos carre colle"].id, ...tier },
@@ -317,8 +364,133 @@ async function main() {
     });
   }
   console.log(
-    `📎 ${dosCarreColleTiers.length + dosCarreCollePURTiers.length} binding digital price tiers created`
+    `📎 ${piqureDigitalTiers.length + dosCarreColleTiers.length + dosCarreCollePURTiers.length} binding digital price tiers created`
   );
+
+  // ── 6b. Binding Types – Offset Price Tiers ────────────────────────────────
+  // Source: Tableau_Façonnage_OFFSET.csv
+  // Piqure: columns = cahiers, calage (1er mille), roulage/1000 (1-5k), roulage/1000 (>5k)
+  // We store two rows per cahier count: one for <=5000 qty (standard), one for >5000 qty
+  type OffsetBindingTierSeed = { cahiersCount: number; calageCost: number; roulagePer1000: number };
+
+  const piqureOffsetTiers: OffsetBindingTierSeed[] = [
+    { cahiersCount: 1, calageCost: 73,  roulagePer1000: 31 },
+    { cahiersCount: 2, calageCost: 93,  roulagePer1000: 49 },
+    { cahiersCount: 3, calageCost: 112, roulagePer1000: 63 },
+    { cahiersCount: 4, calageCost: 133, roulagePer1000: 84 },
+    { cahiersCount: 5, calageCost: 156, roulagePer1000: 115 },
+    { cahiersCount: 6, calageCost: 182, roulagePer1000: 132 },
+    { cahiersCount: 7, calageCost: 275, roulagePer1000: 163 },
+  ];
+
+  // Dos carré collé sans couture: cahiers+CV (2 to 24+), calage, roulage/1000
+  // Source: rows 3-32 of Tableau_Façonnage_OFFSET, column 1 (Cahiers+CV), 2 (Calage), 3 (Roulage/1000)
+  const dosCarreColleOffsetTiers: OffsetBindingTierSeed[] = [
+    { cahiersCount: 2,  calageCost: 215.25, roulagePer1000: 91 },
+    { cahiersCount: 3,  calageCost: 218.40, roulagePer1000: 97 },
+    { cahiersCount: 4,  calageCost: 221.55, roulagePer1000: 109 },
+    { cahiersCount: 5,  calageCost: 223.65, roulagePer1000: 118 },
+    { cahiersCount: 6,  calageCost: 225.75, roulagePer1000: 128 },
+    { cahiersCount: 7,  calageCost: 231.00, roulagePer1000: 151 },
+    { cahiersCount: 8,  calageCost: 234.15, roulagePer1000: 163 },
+    { cahiersCount: 9,  calageCost: 237.30, roulagePer1000: 197 },
+    { cahiersCount: 10, calageCost: 240.45, roulagePer1000: 204 },
+    { cahiersCount: 11, calageCost: 244.65, roulagePer1000: 209 },
+    { cahiersCount: 12, calageCost: 246.75, roulagePer1000: 216 },
+    { cahiersCount: 13, calageCost: 250.95, roulagePer1000: 233 },
+    { cahiersCount: 14, calageCost: 254.10, roulagePer1000: 245 },
+    { cahiersCount: 15, calageCost: 257.25, roulagePer1000: 255 },
+    { cahiersCount: 16, calageCost: 260.40, roulagePer1000: 261 },
+    { cahiersCount: 17, calageCost: 263.55, roulagePer1000: 278 },
+    { cahiersCount: 18, calageCost: 267.75, roulagePer1000: 289 },
+    { cahiersCount: 19, calageCost: 271.95, roulagePer1000: 300 },
+    { cahiersCount: 20, calageCost: 274.05, roulagePer1000: 310 },
+    { cahiersCount: 21, calageCost: 277.20, roulagePer1000: 322 },
+    { cahiersCount: 22, calageCost: 280.35, roulagePer1000: 334 },
+    { cahiersCount: 23, calageCost: 284.55, roulagePer1000: 347 },
+    { cahiersCount: 24, calageCost: 287.70, roulagePer1000: 359 },
+    // Per additional cahier beyond 24 (encoded as cahiersCount: 25 = "+1" row)
+    { cahiersCount: 25, calageCost: 4.20,   roulagePer1000: 12 },
+  ];
+
+  // Dos carré collé avec couture: same structure, different prices
+  const dosCarreColleAvecCoutureOffsetTiers: OffsetBindingTierSeed[] = [
+    { cahiersCount: 2,  calageCost: 489.28, roulagePer1000: 136.73 },
+    { cahiersCount: 3,  calageCost: 520.92, roulagePer1000: 150.29 },
+    { cahiersCount: 4,  calageCost: 534.48, roulagePer1000: 166.11 },
+    { cahiersCount: 5,  calageCost: 551.43, roulagePer1000: 187.58 },
+    { cahiersCount: 6,  calageCost: 575.16, roulagePer1000: 207.92 },
+    { cahiersCount: 7,  calageCost: 587.59, roulagePer1000: 232.78 },
+    { cahiersCount: 8,  calageCost: 609.06, roulagePer1000: 255.38 },
+    { cahiersCount: 9,  calageCost: 616.97, roulagePer1000: 307.36 },
+    { cahiersCount: 10, calageCost: 622.62, roulagePer1000: 320.92 },
+    { cahiersCount: 11, calageCost: 652.00, roulagePer1000: 335.61 },
+    { cahiersCount: 12, calageCost: 691.55, roulagePer1000: 349.17 },
+    { cahiersCount: 13, calageCost: 734.49, roulagePer1000: 381.94 },
+    { cahiersCount: 14, calageCost: 763.87, roulagePer1000: 409.06 },
+    { cahiersCount: 15, calageCost: 786.47, roulagePer1000: 426.01 },
+    // Per additional cahier
+    { cahiersCount: 16, calageCost: 22.60,  roulagePer1000: 21.47 },
+  ];
+
+  // Dos carré collé PUR: same structure, different prices
+  const dosCarreCollePUROffsetTiers: OffsetBindingTierSeed[] = [
+    { cahiersCount: 2,  calageCost: 320.25, roulagePer1000: 95.55 },
+    { cahiersCount: 3,  calageCost: 348.60, roulagePer1000: 101.85 },
+    { cahiersCount: 4,  calageCost: 364.35, roulagePer1000: 114.45 },
+    { cahiersCount: 5,  calageCost: 378.00, roulagePer1000: 123.90 },
+    { cahiersCount: 6,  calageCost: 401.10, roulagePer1000: 134.40 },
+    { cahiersCount: 7,  calageCost: 413.70, roulagePer1000: 158.55 },
+    { cahiersCount: 8,  calageCost: 433.65, roulagePer1000: 171.15 },
+    { cahiersCount: 9,  calageCost: 438.90, roulagePer1000: 206.85 },
+    { cahiersCount: 10, calageCost: 446.25, roulagePer1000: 214.20 },
+    { cahiersCount: 11, calageCost: 472.50, roulagePer1000: 219.45 },
+    { cahiersCount: 12, calageCost: 508.20, roulagePer1000: 226.80 },
+    { cahiersCount: 13, calageCost: 547.05, roulagePer1000: 244.65 },
+    { cahiersCount: 14, calageCost: 574.35, roulagePer1000: 257.25 },
+    { cahiersCount: 15, calageCost: 590.10, roulagePer1000: 267.75 },
+    { cahiersCount: 16, calageCost: 620.55, roulagePer1000: 274.05 },
+    { cahiersCount: 17, calageCost: 636.30, roulagePer1000: 291.90 },
+    { cahiersCount: 18, calageCost: 660.45, roulagePer1000: 303.45 },
+    { cahiersCount: 19, calageCost: 669.90, roulagePer1000: 315.00 },
+    { cahiersCount: 20, calageCost: 696.15, roulagePer1000: 325.50 },
+    { cahiersCount: 21, calageCost: 717.15, roulagePer1000: 338.10 },
+    { cahiersCount: 22, calageCost: 738.15, roulagePer1000: 350.70 },
+    { cahiersCount: 23, calageCost: 759.15, roulagePer1000: 364.35 },
+    { cahiersCount: 24, calageCost: 780.15, roulagePer1000: 376.95 },
+    { cahiersCount: 25, calageCost: 799.05, roulagePer1000: 389.55 },
+    { cahiersCount: 26, calageCost: 821.10, roulagePer1000: 402.15 },
+    { cahiersCount: 27, calageCost: 842.10, roulagePer1000: 414.75 },
+    // Per additional cahier
+    { cahiersCount: 28, calageCost: 21.00,  roulagePer1000: 15.75 },
+  ];
+
+  let offsetBindingTierCount = 0;
+  for (const tier of piqureOffsetTiers) {
+    await prisma.bindingPriceTierOffset.create({
+      data: { bindingTypeId: bindingTypes["Piqure"].id, ...tier },
+    });
+    offsetBindingTierCount++;
+  }
+  for (const tier of dosCarreColleOffsetTiers) {
+    await prisma.bindingPriceTierOffset.create({
+      data: { bindingTypeId: bindingTypes["Dos carre colle"].id, ...tier },
+    });
+    offsetBindingTierCount++;
+  }
+  for (const tier of dosCarreColleAvecCoutureOffsetTiers) {
+    await prisma.bindingPriceTierOffset.create({
+      data: { bindingTypeId: bindingTypes["Dos carre colle avec couture"].id, ...tier },
+    });
+    offsetBindingTierCount++;
+  }
+  for (const tier of dosCarreCollePUROffsetTiers) {
+    await prisma.bindingPriceTierOffset.create({
+      data: { bindingTypeId: bindingTypes["Dos carre colle PUR"].id, ...tier },
+    });
+    offsetBindingTierCount++;
+  }
+  console.log(`📎 ${offsetBindingTierCount} binding offset price tiers created`);
 
   // ── 7. Fold Types + Costs ────────────────────────────────────────────────
   const foldTypesData = [
@@ -327,13 +499,18 @@ async function main() {
     { name: "Pli Croise", maxFolds: 6, canBeSecondary: true },
   ];
 
+  // XLSM Tableau_Façonnage_OFFSET: these are per-1000 rates (roulage/1000).
+  // The engine adds a fixed calage of 20 EUR: foldCost = 20 + (qty/1000) * rate.
+  // 1-2 plis: 22.5/1000, 3+ plis: 45.0/1000 (Excel rows 7-15).
   const foldCostsData = [
     { numFolds: 1, cost: 22.5 },
     { numFolds: 2, cost: 22.5 },
     { numFolds: 3, cost: 45.0 },
-    { numFolds: 4, cost: 54.0 },
-    { numFolds: 5, cost: 64.8 },
-    { numFolds: 6, cost: 77.76 },
+    { numFolds: 4, cost: 45.0 },
+    { numFolds: 5, cost: 45.0 },
+    { numFolds: 6, cost: 45.0 },
+    { numFolds: 7, cost: 45.0 },
+    { numFolds: 8, cost: 45.0 },
   ];
 
   let foldCostCount = 0;
@@ -362,8 +539,8 @@ async function main() {
 
   // ── 9. Lamination Finishes + Digital Tiers ───────────────────────────────
   const laminationFinishesData = [
-    { name: "Brillant", offsetPricePerM2: 0.25, offsetCalageForfait: 55.0, offsetMinimumBilling: 60.0 },
-    { name: "Mat", offsetPricePerM2: 0.3, offsetCalageForfait: 55.0, offsetMinimumBilling: 115.0 },
+    { name: "Brillant", offsetPricePerM2: 0.14, offsetCalageForfait: 55.0, offsetMinimumBilling: 60.0 },
+    { name: "Mat", offsetPricePerM2: 0.16, offsetCalageForfait: 55.0, offsetMinimumBilling: 115.0 },
     { name: "Soft Touch", offsetPricePerM2: 0.5, offsetCalageForfait: 55.0, offsetMinimumBilling: 115.0 },
   ];
 
@@ -395,10 +572,10 @@ async function main() {
 
   // ── 10. Packaging Options ────────────────────────────────────────────────
   const packagingData = [
-    { name: "Mise en cartons", type: "CARTON", costPerUnit: 0, costPerOrder: 0, appliesTo: ["BROCHURE", "DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
-    { name: "Mise sous film", type: "FILM", costPerUnit: 0, costPerOrder: 0, appliesTo: ["BROCHURE", "DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
-    { name: "Mise sous elastiques par paquet", type: "ELASTIQUE", costPerUnit: 0, costPerOrder: 0, appliesTo: ["BROCHURE", "DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
-    { name: "Boite cristal", type: "CRYSTAL_BOX", costPerUnit: 0, costPerOrder: 0, appliesTo: ["DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
+    { name: "Mise en cartons", type: "CARTON", costPerUnit: 1.0, costPerOrder: 0, appliesTo: ["BROCHURE", "DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
+    { name: "Mise sous film", type: "FILM", costPerUnit: 0.23, costPerOrder: 0, appliesTo: ["BROCHURE", "DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
+    { name: "Mise sous elastiques par paquet", type: "ELASTIQUE", costPerUnit: 0.08, costPerOrder: 0, appliesTo: ["BROCHURE", "DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
+    { name: "Boite cristal", type: "CRYSTAL_BOX", costPerUnit: 0.50, costPerOrder: 0, appliesTo: ["DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
   ];
 
   for (const pkg of packagingData) {
@@ -529,11 +706,14 @@ async function main() {
   console.log(`🗺️  ${departmentsRaw.length} departments created`);
 
   // ── 12. Carriers + Delivery Rates ────────────────────────────────────────
+  // Gandon first (default for Excel-aligned livraison); then France EXPRESS, TNT.
+  let gandon = await prisma.carrier.findFirst({ where: { fournisseurId: null, name: "Gandon" } });
+  if (!gandon) gandon = await prisma.carrier.create({ data: { name: "Gandon", active: true } });
   let franceExpress = await prisma.carrier.findFirst({ where: { fournisseurId: null, name: "France EXPRESS" } });
   if (!franceExpress) franceExpress = await prisma.carrier.create({ data: { name: "France EXPRESS", active: true } });
   let tnt = await prisma.carrier.findFirst({ where: { fournisseurId: null, name: "TNT" } });
   if (!tnt) tnt = await prisma.carrier.create({ data: { name: "TNT", active: true } });
-  console.log(`🚚 2 carriers created (France EXPRESS, TNT)`);
+  console.log(`🚚 3 carriers created (Gandon, France EXPRESS, TNT)`);
 
   // France EXPRESS rates: [maxWeightKg, zone1, zone2, zone3, zone4, zone5]
   const expressRateRows: [number, number, number, number, number, number][] = [
@@ -576,60 +756,144 @@ async function main() {
   }
   console.log(`🚚 ${rateCount} delivery rates created for France EXPRESS`);
 
-  // ── 13. Offset Config ────────────────────────────────────────────────────
+  // ── 12b. Per-Department Delivery Rates (Transports.csv) ──────────────────
+  // Parse the XLSM Transports.csv: columns = Département, Transporteur, <weight1>, <weight2>…
+  // Each row = one department; create one TransportRateByDept record per (dept, maxWeightKg).
+  try {
+    const csvPath = path.join(__dirname, "..", "docs", "sheets", "Transports.csv");
+    const csvContent = fs.readFileSync(csvPath, "utf-8");
+    const lines = csvContent.split("\n").filter(l => l.trim());
+    const headers = lines[0].split(",");
+    // Weight bracket headers start at index 2 (0=Département, 1=Transporteur)
+    const weightHeaders: number[] = [];
+    for (let i = 2; i < headers.length; i++) {
+      const w = parseFloat(headers[i]);
+      if (!isNaN(w)) weightHeaders.push(w);
+      else break; // stop at non-numeric headers (Au 100 kg, etc.)
+    }
+
+    const deptRateBatch: { carrierId: string; departmentCode: string; maxWeightKg: number; price: number }[] = [];
+    for (let rowIdx = 1; rowIdx < lines.length; rowIdx++) {
+      const cols = lines[rowIdx].split(",");
+      const deptCode = (cols[0] ?? "").trim();
+      const transporteurName = (cols[1] ?? "").trim();
+      if (!deptCode || !transporteurName) continue;
+
+      // Import Gandon (default for Excel) and France EXPRESS (legacy)
+      const tl = transporteurName.toLowerCase();
+      const carrier =
+        tl.includes("gandon") ? gandon
+        : tl.includes("france express") ? franceExpress
+        : null;
+      if (!carrier) continue;
+
+      for (let wi = 0; wi < weightHeaders.length; wi++) {
+        const rawVal = (cols[wi + 2] ?? "").trim();
+        if (!rawVal || rawVal.toLowerCase() === "vide") continue;
+        const price = parseFloat(rawVal);
+        if (isNaN(price) || price <= 0) continue;
+        deptRateBatch.push({
+          carrierId: carrier.id,
+          departmentCode: deptCode,
+          maxWeightKg: weightHeaders[wi],
+          price,
+        });
+      }
+    }
+
+    // Batch insert in chunks of 500
+    const CHUNK = 500;
+    let deptRateCount = 0;
+    for (let i = 0; i < deptRateBatch.length; i += CHUNK) {
+      const chunk = deptRateBatch.slice(i, i + CHUNK);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (prisma as any).transportRateByDept.createMany({ data: chunk, skipDuplicates: true });
+      deptRateCount += chunk.length;
+    }
+    console.log(`🗺️  ${deptRateCount} per-department delivery rates imported from Transports.csv`);
+  } catch (err) {
+    console.warn("⚠️  Could not import Transports.csv per-department rates:", (err as Error).message);
+  }
+
+  // ── 13. Offset Config (XLSM-aligned) ─────────────────────────────────────
   const offsetConfigData = [
-    { key: "plate_cost", value: 9.9, unit: "EUR", description: "Cost per aluminum plate" },
+    { key: "plate_cost", value: 11.0, unit: "EUR", description: "Cost per aluminum plate (XLSM)" },
     { key: "plate_cost_large", value: 17.4, unit: "EUR", description: "Cost per plate (large format)" },
     { key: "calage_per_plate", value: 6.0, unit: "EUR", description: "Calibration cost per plate" },
     { key: "calage_vernis", value: 6.0, unit: "EUR", description: "Varnish calibration cost" },
     { key: "recherche_teinte", value: 10.0, unit: "EUR", description: "Color matching cost" },
-    { key: "file_processing_base", value: 12.5, unit: "EUR", description: "Base file processing fee" },
-    { key: "file_processing_per_plate", value: 0.11, unit: "EUR", description: "Additional per plate" },
+    { key: "file_processing_per_treatment", value: 12.5, unit: "EUR", description: "Flat fee per treatment (interior=1, cover=1)" },
+    { key: "file_processing_base", value: 12.5, unit: "EUR", description: "Legacy base file processing fee" },
+    { key: "file_processing_per_plate", value: 0, unit: "EUR", description: "XLSM: no per-plate; use per-treatment" },
     { key: "gache_calage", value: 70, unit: "sheets", description: "Waste sheets per plate (calibration)" },
     { key: "gache_recherche_teinte", value: 100, unit: "sheets", description: "Waste sheets for color matching" },
-    { key: "gache_tirage_pct", value: 0.02, unit: "ratio", description: "Running waste (2%)" },
+    { key: "gache_tirage_pct", value: 0.02, unit: "ratio", description: "Legacy flat running waste" },
+    { key: "gache_tirage_pct_3k", value: 0.002, unit: "ratio", description: "Running waste ≤3000 sheets (0.2%)" },
+    { key: "gache_tirage_pct_5k", value: 0.005, unit: "ratio", description: "Running waste ≤5000 sheets (0.5%)" },
+    { key: "gache_tirage_pct_8k", value: 0.006, unit: "ratio", description: "Running waste ≤8000 sheets (0.6%)" },
+    { key: "gache_tirage_pct_10k", value: 0.008, unit: "ratio", description: "Running waste ≤10000 sheets (0.8%)" },
     { key: "gache_vernis", value: 2, unit: "sheets", description: "Waste sheets for varnish per plate" },
     { key: "running_cost_tier_1", value: 25.0, unit: "EUR/1000", description: "≤1000 sheets" },
     { key: "running_cost_tier_2", value: 16.0, unit: "EUR/1000", description: "1001-3000 sheets" },
     { key: "running_cost_tier_3", value: 15.0, unit: "EUR/1000", description: "3001-5000 sheets" },
     { key: "running_cost_tier_4", value: 15.0, unit: "EUR/1000", description: "5001-10000 sheets" },
-    { key: "running_cost_tier_5", value: 15.0, unit: "EUR/1000", description: ">10000 sheets" },
+    { key: "running_cost_tier_5", value: 15.0, unit: "EUR/1000", description: "10001-12000 sheets" },
+    { key: "running_cost_tier_6", value: 15.0, unit: "EUR/1000", description: ">12000 sheets (XLSM 6th tier)" },
+    { key: "running_cost_vernis", value: 22.0, unit: "EUR/1000", description: "Varnish running cost per 1000 tours (XLSM)" },
+    { key: "gache_recherche_teinte", value: 100, unit: "sheets", description: "Waste sheets for color matching" },
   ];
 
   for (const cfg of offsetConfigData) {
     const row = await prisma.offsetConfig.findFirst({ where: { fournisseurId: null, key: cfg.key } });
-    if (!row) await prisma.offsetConfig.create({ data: { ...cfg } });
+    if (row) {
+      await prisma.offsetConfig.update({ where: { id: row.id }, data: { value: cfg.value, unit: cfg.unit ?? undefined, description: cfg.description ?? undefined } });
+    } else {
+      await prisma.offsetConfig.create({ data: { ...cfg } });
+    }
   }
-  console.log(`⚙️  ${offsetConfigData.length} offset config entries created`);
+  console.log(`⚙️  ${offsetConfigData.length} offset config entries (default upserted)`);
 
-  // ── 14. Digital Config ───────────────────────────────────────────────────
+  // ── 14. Digital Config (XLSM-aligned) ─────────────────────────────────────
   const digitalConfigData = [
-    { key: "color_click_rate", value: 0.035, unit: "EUR", description: "Cost per color click" },
-    { key: "mono_click_rate", value: 0.007, unit: "EUR", description: "Cost per mono click" },
-    { key: "setup_color", value: 80.0, unit: "EUR", description: "Color setup cost" },
-    { key: "setup_mono", value: 15.0, unit: "EUR", description: "Mono setup cost" },
-    { key: "file_processing", value: 45.0, unit: "EUR", description: "Flat fee per job" },
-    { key: "setup_divisor", value: 3000, unit: "divisor", description: "Setup cost divisor" },
+    { key: "color_click_rate", value: 0.03, unit: "EUR", description: "Cost per color click (XLSM)" },
+    { key: "mono_click_rate", value: 0.0065, unit: "EUR", description: "Cost per mono click (XLSM)" },
+    { key: "setup_color", value: 0, unit: "EUR", description: "XLSM: no digital setup" },
+    { key: "setup_mono", value: 0, unit: "EUR", description: "XLSM: no digital setup" },
+    { key: "file_processing", value: 45.0, unit: "EUR", description: "Flat fee brochures" },
+    { key: "file_processing_flat", value: 10.0, unit: "EUR", description: "Flat fee depliants/flyers" },
+    { key: "setup_divisor", value: 3000, unit: "divisor", description: "Legacy setup divisor" },
+    { key: "digital_markup_multiplier", value: 1.5, unit: "ratio", description: "(Paper + Clics) × 1.50 (XLSM)" },
+    { key: "minimum_billing_flat", value: 25.0, unit: "EUR", description: "Minimum billing flat products" },
+    { key: "cutting_cost_per_pose", value: 0.85, unit: "EUR", description: "Cutting cost per pose" },
+    { key: "cutting_cost_per_model", value: 1.25, unit: "EUR", description: "Cutting cost per model" },
   ];
 
   for (const cfg of digitalConfigData) {
     const row = await prisma.digitalConfig.findFirst({ where: { fournisseurId: null, key: cfg.key } });
-    if (!row) await prisma.digitalConfig.create({ data: { ...cfg } });
+    if (row) {
+      await prisma.digitalConfig.update({ where: { id: row.id }, data: { value: cfg.value, unit: cfg.unit ?? undefined, description: cfg.description ?? undefined } });
+    } else {
+      await prisma.digitalConfig.create({ data: { ...cfg } });
+    }
   }
-  console.log(`⚙️  ${digitalConfigData.length} digital config entries created`);
+  console.log(`⚙️  ${digitalConfigData.length} digital config entries (default upserted)`);
 
   // ── 15. Margin Config ────────────────────────────────────────────────────
   const marginConfigData = [
     { key: "digital_final_margin", value: 0.05, unit: "ratio", description: "5% applied to total digital price" },
     { key: "offset_final_margin", value: 0.07, unit: "ratio", description: "7% applied to total offset price" },
-    { key: "paper_margin", value: 0.15, unit: "ratio", description: "15% markup on paper costs (offset)" },
+    { key: "paper_margin", value: 0.15, unit: "ratio", description: "15% markup on paper costs (offset, XLSM)" },
   ];
 
   for (const cfg of marginConfigData) {
     const row = await prisma.marginConfig.findFirst({ where: { fournisseurId: null, key: cfg.key } });
-    if (!row) await prisma.marginConfig.create({ data: { ...cfg } });
+    if (row) {
+      await prisma.marginConfig.update({ where: { id: row.id }, data: { value: cfg.value, unit: cfg.unit ?? undefined, description: cfg.description ?? undefined } });
+    } else {
+      await prisma.marginConfig.create({ data: { ...cfg } });
+    }
   }
-  console.log(`💰 ${marginConfigData.length} margin config entries created`);
+  console.log(`💰 ${marginConfigData.length} margin config entries (default upserted)`);
 
   // ── 16. Machine Formats ──────────────────────────────────────────────────
   const machineFormatsData = [

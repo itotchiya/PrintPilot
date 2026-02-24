@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { Eye, Pencil, Trash2 } from "lucide-react";
+import { Eye, Pencil, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,6 +49,16 @@ interface DeliveryRate {
   price: number;
 }
 
+interface TransportRateByDept {
+  id: string;
+  carrierId: string;
+  departmentCode: string;
+  maxWeightKg: number;
+  price: number;
+}
+
+type DeptRateFormData = Pick<TransportRateByDept, "departmentCode" | "maxWeightKg" | "price">;
+
 type DeptFormData = Pick<Department, "code" | "name" | "zone" | "isSpecialZone">;
 type CarrierFormData = Pick<Carrier, "name" | "active">;
 type RateFormData = Pick<DeliveryRate, "zone" | "maxWeightKg" | "price">;
@@ -63,6 +73,8 @@ const emptyDept: DeptFormData = {
 const emptyCarrier: CarrierFormData = { name: "", active: true };
 
 const emptyRate: RateFormData = { zone: 1, maxWeightKg: 0, price: 0 };
+
+const emptyDeptRate: DeptRateFormData = { departmentCode: "", maxWeightKg: 0, price: 0 };
 
 function toNum(v: unknown): number {
   if (typeof v === "number" && !Number.isNaN(v)) return v;
@@ -144,6 +156,40 @@ export default function DeliveryConfigPage() {
   } | null>(null);
   const [isRateDeleting, setIsRateDeleting] = useState(false);
 
+  // --- Per-dept rates (TransportRateByDept) ---
+  const [deptRatesMap, setDeptRatesMap] = useState<Record<string, TransportRateByDept[]>>({});
+  const [deptRatesLoading, setDeptRatesLoading] = useState<Record<string, boolean>>({});
+  const [deptRatesSearch, setDeptRatesSearch] = useState<Record<string, string>>({});
+
+  const fetchDeptRates = useCallback(async (carrierId: string, search?: string) => {
+    setDeptRatesLoading((p) => ({ ...p, [carrierId]: true }));
+    try {
+      const q = search ? `?dept=${encodeURIComponent(search)}` : "";
+      const res = await fetch(`/api/admin/config/carriers/${carrierId}/dept-rates${q}`);
+      if (!res.ok) throw new Error("Erreur");
+      const data: TransportRateByDept[] = await res.json();
+      setDeptRatesMap((p) => ({ ...p, [carrierId]: data }));
+    } catch {
+      toast.error("Impossible de charger les tarifs par département");
+    } finally {
+      setDeptRatesLoading((p) => ({ ...p, [carrierId]: false }));
+    }
+  }, []);
+
+  const [deptRateDialogOpen, setDeptRateDialogOpen] = useState(false);
+  const [editingDeptRate, setEditingDeptRate] = useState<TransportRateByDept | null>(null);
+  const [deptRateForm, setDeptRateForm] = useState<DeptRateFormData>(emptyDeptRate);
+  const [deptRateCarrierId, setDeptRateCarrierId] = useState<string | null>(null);
+  const [isDeptRateSubmitting, setIsDeptRateSubmitting] = useState(false);
+  const [deptRateDeleteTarget, setDeptRateDeleteTarget] = useState<{
+    rate: TransportRateByDept;
+    carrierId: string;
+  } | null>(null);
+  const [isDeptRateDeleting, setIsDeptRateDeleting] = useState(false);
+
+  // Per-carrier sub-tab: "zone-rates" | "dept-rates"
+  const [carrierSubTabs, setCarrierSubTabs] = useState<Record<string, string>>({});
+
   // --- Tab state (to trigger rate fetching) ---
   const [activeTab, setActiveTab] = useState("departments");
 
@@ -151,8 +197,8 @@ export default function DeliveryConfigPage() {
     (value: string) => {
       setActiveTab(value);
       const isCarrierTab = carriers.some((c) => c.id === value);
-      if (isCarrierTab && !ratesMap[value]) {
-        fetchRates(value);
+      if (isCarrierTab) {
+        if (!ratesMap[value]) fetchRates(value);
       }
     },
     [carriers, ratesMap, fetchRates],
@@ -343,6 +389,77 @@ export default function DeliveryConfigPage() {
     }
   }, [rateDeleteTarget, fetchRates]);
 
+  // ==================== Dept-Rate CRUD ====================
+
+  const openAddDeptRate = useCallback((carrierId: string) => {
+    setDeptRateCarrierId(carrierId);
+    setEditingDeptRate(null);
+    setDeptRateForm(emptyDeptRate);
+    setDeptRateDialogOpen(true);
+  }, []);
+
+  const openEditDeptRate = useCallback((rate: TransportRateByDept, carrierId: string) => {
+    setDeptRateCarrierId(carrierId);
+    setEditingDeptRate(rate);
+    setDeptRateForm({
+      departmentCode: rate.departmentCode,
+      maxWeightKg: toNum(rate.maxWeightKg),
+      price: toNum(rate.price),
+    });
+    setDeptRateDialogOpen(true);
+  }, []);
+
+  const handleDeptRateSubmit = useCallback(async () => {
+    if (!deptRateCarrierId) return;
+    setIsDeptRateSubmitting(true);
+    try {
+      const url = `/api/admin/config/carriers/${deptRateCarrierId}/dept-rates`;
+      const method = editingDeptRate ? "PUT" : "POST";
+      const body = editingDeptRate ? { id: editingDeptRate.id, ...deptRateForm } : deptRateForm;
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Erreur");
+      }
+      toast.success(editingDeptRate ? "Tarif modifié" : "Tarif créé");
+      setDeptRateDialogOpen(false);
+      await fetchDeptRates(deptRateCarrierId, deptRatesSearch[deptRateCarrierId]);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setIsDeptRateSubmitting(false);
+    }
+  }, [deptRateCarrierId, editingDeptRate, deptRateForm, fetchDeptRates, deptRatesSearch]);
+
+  const handleDeleteDeptRate = useCallback(async () => {
+    if (!deptRateDeleteTarget) return;
+    setIsDeptRateDeleting(true);
+    try {
+      const res = await fetch(
+        `/api/admin/config/carriers/${deptRateDeleteTarget.carrierId}/dept-rates?id=${deptRateDeleteTarget.rate.id}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Erreur");
+      }
+      toast.success("Tarif supprimé");
+      setDeptRateDeleteTarget(null);
+      await fetchDeptRates(
+        deptRateDeleteTarget.carrierId,
+        deptRatesSearch[deptRateDeleteTarget.carrierId],
+      );
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erreur de suppression");
+    } finally {
+      setIsDeptRateDeleting(false);
+    }
+  }, [deptRateDeleteTarget, fetchDeptRates, deptRatesSearch]);
+
   // ==================== Column definitions ====================
 
   const deptColumns: ColumnDef<Department>[] = useMemo(
@@ -479,6 +596,43 @@ export default function DeliveryConfigPage() {
     [openEditRate],
   );
 
+  const buildDeptRateColumns = useCallback(
+    (carrierId: string): ColumnDef<TransportRateByDept>[] => [
+      { key: "departmentCode", header: "Département", sortable: true },
+      {
+        key: "maxWeightKg",
+        header: "Poids max (kg)",
+        sortable: true,
+        cell: (r) => `${toNum(r.maxWeightKg)} kg`,
+      },
+      {
+        key: "price",
+        header: "Prix €",
+        cell: (r) => toNum(r.price).toFixed(2),
+      },
+      {
+        key: "actions",
+        header: "",
+        className: "w-[100px]",
+        cell: (r) => (
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" onClick={() => openEditDeptRate(r, carrierId)}>
+              <Pencil className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setDeptRateDeleteTarget({ rate: r, carrierId })}
+            >
+              <Trash2 className="size-4 text-destructive" />
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [openEditDeptRate],
+  );
+
   // ==================== Render ====================
 
   return (
@@ -533,27 +687,87 @@ export default function DeliveryConfigPage() {
           />
         </TabsContent>
 
-        {/* Per-carrier rate tabs */}
-        {carriers.map((c) => (
-          <TabsContent key={c.id} value={c.id} className="mt-4">
-            <ConfigDataTable
-              data={
-                (ratesMap[c.id] ?? []) as unknown as Record<
-                  string,
-                  unknown
-                >[]
-              }
-              columns={
-                buildRateColumns(c.id) as unknown as ColumnDef<
-                  Record<string, unknown>
-                >[]
-              }
-              onAdd={() => openAddRate(c.id)}
-              addLabel="Ajouter un tarif"
-              isLoading={ratesLoading[c.id] ?? false}
-            />
-          </TabsContent>
-        ))}
+        {/* Per-carrier rate tabs — two sub-tabs each */}
+        {carriers.map((c) => {
+          const subTab = carrierSubTabs[c.id] ?? "zone-rates";
+          return (
+            <TabsContent key={c.id} value={c.id} className="mt-4">
+              <Tabs
+                value={subTab}
+                onValueChange={(v) => {
+                  setCarrierSubTabs((p) => ({ ...p, [c.id]: v }));
+                  if (v === "dept-rates" && !deptRatesMap[c.id]) {
+                    fetchDeptRates(c.id);
+                  }
+                }}
+              >
+                <TabsList>
+                  <TabsTrigger value="zone-rates">Tarifs par zone</TabsTrigger>
+                  <TabsTrigger value="dept-rates">
+                    Tarifs par département
+                    {deptRatesMap[c.id]
+                      ? ` (${deptRatesMap[c.id].length}${deptRatesMap[c.id].length >= 500 ? "+" : ""})`
+                      : ""}
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="zone-rates" className="mt-3">
+                  <ConfigDataTable
+                    data={(ratesMap[c.id] ?? []) as unknown as Record<string, unknown>[]}
+                    columns={buildRateColumns(c.id) as unknown as ColumnDef<Record<string, unknown>>[]}
+                    onAdd={() => openAddRate(c.id)}
+                    addLabel="Ajouter un tarif zone"
+                    isLoading={ratesLoading[c.id] ?? false}
+                  />
+                </TabsContent>
+
+                <TabsContent value="dept-rates" className="mt-3">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Search className="size-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Filtrer par code département (ex : 75, 69)…"
+                      className="max-w-xs h-8 text-sm"
+                      value={deptRatesSearch[c.id] ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setDeptRatesSearch((p) => ({ ...p, [c.id]: v }));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") fetchDeptRates(c.id, deptRatesSearch[c.id]);
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => fetchDeptRates(c.id, deptRatesSearch[c.id])}
+                    >
+                      Rechercher
+                    </Button>
+                    {(deptRatesSearch[c.id] ?? "") !== "" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setDeptRatesSearch((p) => ({ ...p, [c.id]: "" }));
+                          fetchDeptRates(c.id, "");
+                        }}
+                      >
+                        Effacer
+                      </Button>
+                    )}
+                  </div>
+                  <ConfigDataTable
+                    data={(deptRatesMap[c.id] ?? []) as unknown as Record<string, unknown>[]}
+                    columns={buildDeptRateColumns(c.id) as unknown as ColumnDef<Record<string, unknown>>[]}
+                    onAdd={() => openAddDeptRate(c.id)}
+                    addLabel="Ajouter un tarif"
+                    isLoading={deptRatesLoading[c.id] ?? false}
+                  />
+                </TabsContent>
+              </Tabs>
+            </TabsContent>
+          );
+        })}
       </Tabs>
 
       {/* Department dialog */}
@@ -750,6 +964,69 @@ export default function DeliveryConfigPage() {
         title="Supprimer le tarif"
         description="Ce tarif sera définitivement supprimé."
         isDeleting={isRateDeleting}
+      />
+
+      {/* Dept-Rate dialog */}
+      <ConfigDialog
+        open={deptRateDialogOpen}
+        onOpenChange={setDeptRateDialogOpen}
+        title={editingDeptRate ? "Modifier le tarif par département" : "Nouveau tarif par département"}
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleDeptRateSubmit();
+        }}
+        onCancel={() => setDeptRateDialogOpen(false)}
+        isSubmitting={isDeptRateSubmitting}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="dr-dept">Code département</Label>
+          <Input
+            id="dr-dept"
+            value={deptRateForm.departmentCode}
+            onChange={(e) => setDeptRateForm((p) => ({ ...p, departmentCode: e.target.value }))}
+            placeholder="ex : 75, 69, 01"
+            required
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="dr-weight">Poids max (kg)</Label>
+            <Input
+              id="dr-weight"
+              type="number"
+              step={0.1}
+              min={0}
+              value={deptRateForm.maxWeightKg || ""}
+              onChange={(e) =>
+                setDeptRateForm((p) => ({ ...p, maxWeightKg: parseFloat(e.target.value) || 0 }))
+              }
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="dr-price">Prix (€)</Label>
+            <Input
+              id="dr-price"
+              type="number"
+              step={0.01}
+              min={0}
+              value={deptRateForm.price || ""}
+              onChange={(e) =>
+                setDeptRateForm((p) => ({ ...p, price: parseFloat(e.target.value) || 0 }))
+              }
+              required
+            />
+          </div>
+        </div>
+      </ConfigDialog>
+
+      <DeleteConfirmDialog
+        open={!!deptRateDeleteTarget}
+        onOpenChange={(open) => !open && setDeptRateDeleteTarget(null)}
+        onConfirm={handleDeleteDeptRate}
+        title="Supprimer le tarif par département"
+        description="Ce tarif sera définitivement supprimé."
+        isDeleting={isDeptRateDeleting}
       />
     </div>
   );

@@ -10,6 +10,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { canHaveInterior } from "@/lib/pricing/product-rules";
+import { blurActiveElement, onWizardSelectTriggerPointerDown } from "../selectBlurFix";
+import { FALLBACK_PAPER_TYPES } from "../fallbacks";
+import type { PaperType } from "../fallbacks";
 import type { StepProps } from "../WizardContainer";
 
 interface PaperGrammage {
@@ -19,20 +22,47 @@ interface PaperGrammage {
   active: boolean;
 }
 
-interface PaperType {
-  id: string;
-  name: string;
-  category: string;
-  active: boolean;
-  grammages: PaperGrammage[];
-}
-
 interface ColorMode {
   id: string;
   name: string;
   platesPerSide: number;
   hasVarnish: boolean;
   active: boolean;
+}
+const FALLBACK_COLOR_MODES: ColorMode[] = [
+  { id: "fb-c-1", name: "Quadrichromie", platesPerSide: 4, hasVarnish: false, active: true },
+  { id: "fb-c-2", name: "Quadrichromie + Vernis Machine", platesPerSide: 5, hasVarnish: true, active: true },
+  { id: "fb-c-3", name: "Bichromie", platesPerSide: 2, hasVarnish: false, active: true },
+  { id: "fb-c-4", name: "Noir", platesPerSide: 1, hasVarnish: false, active: true },
+];
+
+function parsePaperTypes(raw: unknown): PaperType[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((p: Record<string, unknown>) => ({
+    id: String(p.id ?? ""),
+    name: String(p.name ?? ""),
+    category: String(p.category ?? "BOTH"),
+    active: p.active !== false,
+    grammages: Array.isArray(p.grammages)
+      ? (p.grammages as Record<string, unknown>[]).map((g: Record<string, unknown>) => ({
+          id: String(g.id ?? ""),
+          grammage: Number(g.grammage) || 0,
+          pricePerKg: Number(g.pricePerKg) || 0,
+          active: g.active !== false,
+        }))
+      : [],
+  })).filter((p) => p.id && p.name);
+}
+
+function parseColorModes(raw: unknown): ColorMode[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((c: Record<string, unknown>) => ({
+    id: String(c.id ?? ""),
+    name: String(c.name ?? ""),
+    platesPerSide: Number(c.platesPerSide) || 4,
+    hasVarnish: c.hasVarnish === true,
+    active: c.active !== false,
+  })).filter((x) => x.id && x.name);
 }
 
 export function StepInterior({ data, updateData }: StepProps) {
@@ -41,16 +71,22 @@ export function StepInterior({ data, updateData }: StepProps) {
 
   useEffect(() => {
     fetch("/api/admin/config/paper")
-      .then((r) => r.json())
-      .then(setPaperTypes)
-      .catch(() => {});
+      .then((r) => (r.ok ? r.json() : []))
+      .then((raw: unknown) => {
+        const list = parsePaperTypes(raw);
+        setPaperTypes(list.length > 0 ? list : FALLBACK_PAPER_TYPES);
+      })
+      .catch(() => setPaperTypes(FALLBACK_PAPER_TYPES));
   }, []);
 
   useEffect(() => {
     fetch("/api/admin/config/colors")
-      .then((r) => r.json())
-      .then((all: ColorMode[]) => setColorModes(all.filter((c) => c.active)))
-      .catch(() => {});
+      .then((r) => (r.ok ? r.json() : []))
+      .then((raw: unknown) => {
+        const list = parseColorModes(raw).filter((c) => c.active);
+        setColorModes(list.length > 0 ? list : FALLBACK_COLOR_MODES);
+      })
+      .catch(() => setColorModes(FALLBACK_COLOR_MODES));
   }, []);
 
   const showInterior = canHaveInterior(data.productType);
@@ -95,11 +131,12 @@ export function StepInterior({ data, updateData }: StepProps) {
                   paperInteriorTypeName: pt?.name ?? null,
                 });
               }}
+              onOpenChange={(open) => open && blurActiveElement()}
             >
-              <SelectTrigger>
+              <SelectTrigger onPointerDown={onWizardSelectTriggerPointerDown}>
                 <SelectValue placeholder="Choisir le papier…" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper" sideOffset={4} className="z-[100]">
                 {filteredTypes.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
@@ -120,11 +157,12 @@ export function StepInterior({ data, updateData }: StepProps) {
                 updateData({ paperInteriorGrammage: Number(v) })
               }
               disabled={!data.paperInteriorTypeId || grammages.length === 0}
+              onOpenChange={(open) => open && blurActiveElement()}
             >
-              <SelectTrigger>
+              <SelectTrigger onPointerDown={onWizardSelectTriggerPointerDown}>
                 <SelectValue placeholder="Choisir le grammage…" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper" sideOffset={4} className="z-[100]">
                 {grammages.map((g) => (
                   <SelectItem key={g.id} value={String(g.grammage)}>
                     {g.grammage} g/m²
@@ -147,11 +185,12 @@ export function StepInterior({ data, updateData }: StepProps) {
               colorModeInteriorName: mode?.name ?? null,
             });
           }}
+          onOpenChange={(open) => open && blurActiveElement()}
         >
-          <SelectTrigger>
+          <SelectTrigger onPointerDown={onWizardSelectTriggerPointerDown}>
             <SelectValue placeholder="Choisir le mode couleur…" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" sideOffset={4} className="z-[100]">
             {colorModes.map((c) => (
               <SelectItem key={c.id} value={c.id}>
                 {c.name}

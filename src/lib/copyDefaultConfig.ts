@@ -144,9 +144,14 @@ export async function copyDefaultConfigToFournisseur(fid: string) {
     });
   }
 
-  const defaultCarriers = await prisma.carrier.findMany({ where: { fournisseurId: null }, include: { deliveryRates: true } });
+  const defaultCarriers = await prisma.carrier.findMany({
+    where: { fournisseurId: null },
+    include: { deliveryRates: true },
+  });
+  const carrierIdMap: Record<string, string> = {};
   for (const c of defaultCarriers) {
     const created = await prisma.carrier.create({ data: { fournisseurId: fid, name: c.name, active: c.active } });
+    carrierIdMap[c.id] = created.id;
     for (const r of c.deliveryRates) {
       await prisma.deliveryRate.create({
         data: {
@@ -157,6 +162,29 @@ export async function copyDefaultConfigToFournisseur(fid: string) {
         },
       });
     }
+  }
+  // Copy per-department transport rates when migration has been applied
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const carriersWithDept = await (prisma as any).transportRateByDept.findMany({
+      where: { carrierId: { in: Object.keys(carrierIdMap) } },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const t of carriersWithDept as any[]) {
+      const newCarrierId = carrierIdMap[t.carrierId];
+      if (!newCarrierId) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (prisma as any).transportRateByDept.create({
+        data: {
+          carrierId: newCarrierId,
+          departmentCode: t.departmentCode,
+          maxWeightKg: copyScalar(t.maxWeightKg),
+          price: copyScalar(t.price),
+        },
+      });
+    }
+  } catch {
+    // TransportRateByDept migration not yet applied — skip
   }
 
   const defaultOffsetConfig = await prisma.offsetConfig.findMany({ where: { fournisseurId: null } });

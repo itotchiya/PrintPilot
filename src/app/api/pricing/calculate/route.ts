@@ -21,9 +21,12 @@ export async function POST(request: NextRequest) {
       ...result,
     });
   } catch (error) {
-    console.error("Pricing calculation error:", error);
+    const message = error instanceof Error ? error.message : "Erreur de calcul";
+    const stack = error instanceof Error ? error.stack : undefined;
+    console.error("Pricing calculation error:", message);
+    if (stack) console.error(stack);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Erreur de calcul" },
+      { error: message },
       { status: 500 }
     );
   }

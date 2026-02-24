@@ -42,9 +42,16 @@ interface PricingResult {
   deliveryCost: number;
   weightPerCopyGrams: number;
   currency: "EUR";
+  bestTotal?: number;
+  bestMethod?: "digital" | "offset";
+  ecart?: number;
   calculationVariablesInputs?: CalculationVariable[];
   calculationVariablesNumerique?: CalculationVariable[];
   calculationVariablesOffset?: CalculationVariable[];
+  digitalError?: string | null;
+  offsetError?: string | null;
+  digitalSuggestion?: string | null;
+  offsetSuggestion?: string | null;
 }
 
 interface BatchResultItem extends PricingResult {
@@ -59,8 +66,8 @@ const PRODUCT_LABELS: Record<string, string> = {
   CARTE_DE_VISITE: "Carte de visite",
 };
 
-function BreakdownRow({ label, value }: { label: string; value: number }) {
-  if (value === 0) return null;
+function BreakdownRow({ label, value, alwaysShow }: { label: string; value: number; alwaysShow?: boolean }) {
+  if (value === 0 && !alwaysShow) return null;
   return (
     <div className="flex justify-between text-sm py-1">
       <span className="text-muted-foreground">{label}</span>
@@ -329,6 +336,8 @@ function PriceCard({
   onSelect,
   methodKey,
   selecting,
+  error,
+  suggestion,
 }: {
   title: string;
   total: number;
@@ -338,17 +347,22 @@ function PriceCard({
   onSelect?: () => void;
   methodKey: "digital" | "offset";
   selecting?: string | null;
+  error?: string | null;
+  suggestion?: string | null;
 }) {
   const isDigital = "clickCostInterior" in breakdown;
   const Icon = isDigital ? Monitor : Layers;
+  const hasError = Boolean(error);
   return (
     <Card
       className={
-        selected
-          ? "border-primary ring-1 ring-primary shadow-md"
-          : recommended
-            ? "border-primary/50 shadow-md"
-            : ""
+        hasError
+          ? "border-destructive cursor-not-allowed opacity-90"
+          : selected
+            ? "border-primary ring-1 ring-primary shadow-md"
+            : recommended
+              ? "border-primary/50 shadow-md"
+              : ""
       }
     >
       <CardHeader className="pb-2">
@@ -360,7 +374,7 @@ function PriceCard({
             <CardTitle className="text-base">{title}</CardTitle>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-1.5">
-            {recommended && (
+            {!hasError && recommended && (
               <Badge className="bg-green-100 text-green-700 border-transparent dark:bg-green-900/30 dark:text-green-400 text-xs">
                 <Star className="mr-1 h-3 w-3" />
                 Recommandé
@@ -374,9 +388,20 @@ function PriceCard({
             )}
           </div>
         </div>
-        <p className="text-3xl font-bold text-foreground tabular-nums">
-          {formatCurrency(total)}
-        </p>
+        {hasError ? (
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive space-y-1">
+            <p>{error}</p>
+            {suggestion && (
+              <p className="text-muted-foreground font-normal">
+                Suggestion : {suggestion}
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="text-3xl font-bold text-foreground tabular-nums">
+            {formatCurrency(total)}
+          </p>
+        )}
       </CardHeader>
       <CardContent className="space-y-3">
         <Separator className="mb-3" />
@@ -406,6 +431,9 @@ function PriceCard({
               label="Traitement fichier"
               value={(breakdown as DigitalBreakdown).fileProcessing}
             />
+            <BreakdownRow label="Pliage" value={(breakdown as DigitalBreakdown).foldCost ?? 0} alwaysShow />
+            <BreakdownRow label="Coupe" value={(breakdown as DigitalBreakdown).cuttingCost} alwaysShow />
+            <BreakdownRow label="Conditionnement" value={(breakdown as DigitalBreakdown).packagingCost} alwaysShow />
           </>
         ) : (
           <>
@@ -433,6 +461,15 @@ function PriceCard({
               label="Fichiers"
               value={(breakdown as OffsetBreakdown).fileProcessing}
             />
+            <BreakdownRow label="Pliage" value={(breakdown as OffsetBreakdown).foldCost} alwaysShow />
+            <BreakdownRow label="Coupe" value={(breakdown as OffsetBreakdown).cuttingCost} alwaysShow />
+            <BreakdownRow label="Conditionnement" value={(breakdown as OffsetBreakdown).packagingCost} alwaysShow />
+            {(breakdown as OffsetBreakdown).tauxDeMarque != null && (
+              <div className="flex justify-between text-sm py-1">
+                <span className="text-muted-foreground">Taux de marque</span>
+                <span className="font-medium tabular-nums">{((breakdown as OffsetBreakdown).tauxDeMarque! * 100).toFixed(1)} %</span>
+              </div>
+            )}
           </>
         )}
         <BreakdownRow label="Reliure / Façonnage" value={breakdown.bindingCost} />
@@ -443,7 +480,7 @@ function PriceCard({
           <span>Total HT</span>
           <span className="tabular-nums">{formatCurrency(total)}</span>
         </div>
-        {onSelect && (
+        {onSelect && !hasError && (
           <Button
             variant={selected ? "default" : "outline"}
             className="w-full mt-2"
@@ -577,8 +614,157 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
         setResult(resultData);
         setBatchResult(null);
         setSelectedMethod(
-          resultData.digitalTotal <= resultData.offsetTotal ? "digital" : "offset"
+          resultData.offsetError
+            ? "digital"
+            : resultData.digitalError
+              ? "offset"
+              : resultData.digitalTotal <= resultData.offsetTotal
+                ? "digital"
+                : "offset"
         );
+
+        // ── Calculation trace ────────────────────────────────────────────
+        if (typeof window !== "undefined") {
+          const fmtEur = (v: number) =>
+            v.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+          const fmtPct = (v: number) => `${(v * 100).toFixed(2)} %`;
+
+          console.group(
+            "%c[PrintPilot] Résultat du calcul",
+            "color:#10b981;font-weight:bold;font-size:13px"
+          );
+
+          // ── Method availability ───────────────────────────────────────
+          const digitalAvailable = !resultData.digitalError;
+          const offsetAvailable = !resultData.offsetError;
+          console.group(
+            "%c[PrintPilot] Disponibilité des méthodes",
+            "color:#0ea5e9;font-weight:bold"
+          );
+          console.log("Numérique disponible:", digitalAvailable);
+          console.log("Offset disponible:", offsetAvailable);
+          if (!digitalAvailable) {
+            console.log("Raison (numérique):", resultData.digitalError ?? "—");
+            if (resultData.digitalSuggestion) {
+              console.log("Suggestion (numérique):", resultData.digitalSuggestion);
+            }
+          }
+          if (!offsetAvailable) {
+            console.log("Raison (offset):", resultData.offsetError ?? "—");
+            if (resultData.offsetSuggestion) {
+              console.log("Suggestion (offset):", resultData.offsetSuggestion);
+            }
+          }
+          console.groupEnd();
+
+          // ── Inputs / config ──────────────────────────────────────────
+          if (resultData.calculationVariablesInputs?.length) {
+            console.group(
+              "%c📋 Entrées & configuration",
+              "color:#6366f1;font-weight:bold"
+            );
+            console.table(
+              resultData.calculationVariablesInputs.map((v) => ({
+                Paramètre: v.name,
+                Valeur: v.value,
+                Formule: v.formula ?? "—",
+              }))
+            );
+            console.groupEnd();
+          }
+
+          // ── Digital ──────────────────────────────────────────────────
+          if (resultData.digitalError) {
+            console.warn(
+              "%c⚠️  Numérique — erreur de calcul:",
+              "color:#ef4444;font-weight:bold",
+              resultData.digitalError
+            );
+          } else {
+            console.group(
+              `%c🖨️  Numérique — Total HT : ${fmtEur(resultData.digitalTotal)}`,
+              "color:#3b82f6;font-weight:bold"
+            );
+            if (resultData.calculationVariablesNumerique?.length) {
+              console.table(
+                resultData.calculationVariablesNumerique.map((v) => ({
+                  Paramètre: v.name,
+                  Valeur: v.value,
+                  Formule: v.formula ?? "—",
+                }))
+              );
+            }
+            console.log("Breakdown complet :", resultData.digitalBreakdown);
+            console.groupEnd();
+          }
+
+          // ── Offset ───────────────────────────────────────────────────
+          if (resultData.offsetError) {
+            console.warn(
+              "%c⚠️  Offset — erreur de calcul:",
+              "color:#ef4444;font-weight:bold",
+              resultData.offsetError
+            );
+          } else {
+            console.group(
+              `%c🏭  Offset — Total HT : ${fmtEur(resultData.offsetTotal)}`,
+              "color:#f59e0b;font-weight:bold"
+            );
+            if (resultData.calculationVariablesOffset?.length) {
+              console.table(
+                resultData.calculationVariablesOffset.map((v) => ({
+                  Paramètre: v.name,
+                  Valeur: v.value,
+                  Formule: v.formula ?? "—",
+                }))
+              );
+            }
+            console.log("Breakdown complet :", resultData.offsetBreakdown);
+            console.groupEnd();
+          }
+
+          // ── Comparison ───────────────────────────────────────────────
+          console.group("%c📊 Comparaison", "color:#8b5cf6;font-weight:bold");
+          console.table([
+            {
+              Méthode: "Numérique",
+              "Total HT": fmtEur(resultData.digitalTotal),
+              Statut: resultData.digitalError
+                ? "❌ Erreur"
+                : resultData.bestMethod === "digital"
+                  ? "✅ Recommandé"
+                  : "",
+            },
+            {
+              Méthode: "Offset",
+              "Total HT": fmtEur(resultData.offsetTotal),
+              Statut: resultData.offsetError
+                ? "❌ Erreur"
+                : resultData.bestMethod === "offset"
+                  ? "✅ Recommandé"
+                  : "",
+            },
+          ]);
+          console.log(
+            `Meilleure méthode : ${resultData.bestMethod} — ${fmtEur(resultData.bestTotal ?? 0)}`
+          );
+          console.log(
+            `Écart (num − off) : ${fmtEur(resultData.ecart ?? 0)} (${(resultData.ecart ?? 0) > 0 ? "offset moins cher" : "numérique moins cher"})`
+          );
+          console.log(
+            `Poids estimé : ${resultData.weightPerCopyGrams.toFixed(3)} g/ex.`
+          );
+          if (!resultData.digitalError && !resultData.offsetError) {
+            const margin = resultData.offsetBreakdown?.tauxDeMarque;
+            if (margin != null) {
+              console.log(`Taux de marque offset : ${fmtPct(margin)}`);
+            }
+          }
+          console.groupEnd();
+
+          console.groupEnd(); // root group
+        }
+        // ────────────────────────────────────────────────────────────────
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur inconnue");
@@ -753,11 +939,25 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
       {/* Results — single (CLIENT / default) */}
       {result && !batchResult?.length && (
         <div className="space-y-4">
-          {/* Full calculation variables — Superadmin & Fournisseur (Numérique + Offset; Entrées already shown above from snapshot) */}
+          {/* Full calculation variables — Superadmin & Fournisseur */}
           {(role === "SUPER_ADMIN" || role === "FOURNISSEUR") &&
-            (result.calculationVariablesNumerique?.length ||
+            (result.calculationVariablesInputs?.length ||
+              result.calculationVariablesNumerique?.length ||
               result.calculationVariablesOffset?.length) && (
               <div className="space-y-4">
+                {/* Entrées du calcul */}
+                {result.calculationVariablesInputs && result.calculationVariablesInputs.length > 0 && (
+                  <Card className="border-slate-200 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-900/20">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-medium text-slate-800 dark:text-slate-200">
+                        Entrées du calcul
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <VariableList variables={result.calculationVariablesInputs} />
+                    </CardContent>
+                  </Card>
+                )}
                 {/* Numérique */}
                 {result.calculationVariablesNumerique && result.calculationVariablesNumerique.length > 0 && (
                   <Card className="border-blue-200 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20">
@@ -802,6 +1002,8 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
               onSelect={() => setSelectedMethod("digital")}
               methodKey="digital"
               selecting={null}
+              error={result.digitalError}
+              suggestion={result.digitalSuggestion}
             />
             <PriceCard
               title="Offset"
@@ -812,6 +1014,8 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
               onSelect={() => setSelectedMethod("offset")}
               methodKey="offset"
               selecting={null}
+              error={result.offsetError}
+              suggestion={result.offsetSuggestion}
             />
           </div>
 
@@ -887,6 +1091,8 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
                   recommended={r.digitalTotal <= r.offsetTotal}
                   methodKey="digital"
                   selecting={null}
+                  error={r.digitalError}
+                  suggestion={r.digitalSuggestion}
                 />
                 <PriceCard
                   title="Offset"
@@ -895,6 +1101,8 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
                   recommended={r.offsetTotal < r.digitalTotal}
                   methodKey="offset"
                   selecting={null}
+                  error={r.offsetError}
+                  suggestion={r.offsetSuggestion}
                 />
               </div>
             </div>

@@ -17,6 +17,7 @@ import {
   Settings,
   Cpu,
   Percent,
+  Printer,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -97,6 +98,13 @@ const configCategories = [
     href: "/admin/config/margins",
     icon: Percent,
     count: "3 valeurs",
+  },
+  {
+    title: "Machines & Presses",
+    description: "Formats machines et diviseurs de clics",
+    href: "/admin/config/machines",
+    icon: Printer,
+    count: "Formats + diviseurs",
   },
 ];
 

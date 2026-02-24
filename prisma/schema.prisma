@@ -362,13 +362,14 @@ model Department {
 }
 
 model Carrier {
-  id             String          @id @default(cuid())
-  fournisseurId  String?
-  name           String
-  active         Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  deliveryRates   DeliveryRate[]
+  id                    String                 @id @default(cuid())
+  fournisseurId         String?
+  name                  String
+  active                Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  deliveryRates         DeliveryRate[]
+  transportRatesByDept  TransportRateByDept[]
 
   @@unique([fournisseurId, name])
   @@index([fournisseurId])
@@ -387,6 +388,22 @@ model DeliveryRate {
   @@unique([carrierId, zone, maxWeightKg])
   @@index([carrierId])
   @@index([zone])
+}
+
+// Per-department per-weight matrix (XLSM Transports.csv). When present, overrides zone-based rate.
+model TransportRateByDept {
+  id             String   @id @default(cuid())
+  carrierId      String
+  carrier        Carrier  @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+  departmentCode String   // e.g. "14 - Calvados"
+  maxWeightKg    Decimal  // upper bound of bracket (1, 2, 3, ... 10000)
+  price          Decimal
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([carrierId])
+  @@index([departmentCode])
+  @@index([carrierId, departmentCode])
 }
 
 // ─── OFFSET / DIGITAL / MARGIN CONFIG (Key-Value) ─────────────────────────────

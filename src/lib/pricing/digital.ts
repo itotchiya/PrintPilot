@@ -2,12 +2,21 @@ import { calcPaperCostDigital } from "./paper";
 import type { PaperGrammageData } from "./paper";
 
 export interface DigitalConfig {
-  colorClickRate: number;   // EUR per color click (0.035)
-  monoClickRate: number;    // EUR per mono click (0.007)
-  setupColor: number;       // EUR (80)
-  setupMono: number;        // EUR (15)
-  fileProcessing: number;   // EUR flat fee (45)
-  setupDivisor: number;     // divisor for setup cost formula (3000)
+  colorClickRate: number;   // EUR per color click (0.03 XLSM)
+  monoClickRate: number;    // EUR per mono click (0.0065 XLSM)
+  setupColor: number;       // EUR (0 in XLSM — no digital setup)
+  setupMono: number;        // EUR (0 in XLSM)
+  fileProcessing: number;  // EUR flat fee brochures (45)
+  fileProcessingFlat?: number; // EUR flat fee depliants/flyers (10)
+  setupDivisor: number;     // divisor for setup cost formula (unused when setup=0)
+  /** XLSM: (paper + clicks) × multiplier + other costs. 0 = use legacy sum + margin */
+  digitalMarkupMultiplier?: number; // 1.50
+  /** Minimum billing for flat products (depliants/flyers) in EUR */
+  minimumBillingFlat?: number; // 25
+  /** Cutting: cost per pose (form) in EUR */
+  cuttingCostPerPose?: number; // 0.85
+  /** Cutting: cost per model in EUR */
+  cuttingCostPerModel?: number; // 1.25
 }
 
 export interface FormatClickDivisor {
@@ -32,6 +41,42 @@ export interface LaminationPriceTier {
   setupCost: number;
 }
 
+// ── Digital fold cost table (Tableau_Façonnage_Num) ──────────────────────────
+// Structure: { plis: { fixe, tiers: [{ maxQty, perUnit }] } }
+const DIGITAL_FOLD_TABLE: Record<number, { fixe: number; tiers: { maxQty: number; perUnit: number }[] }> = {
+  1: { fixe: 18, tiers: [{ maxQty: 100, perUnit: 0.050 }, { maxQty: 250, perUnit: 0.050 }, { maxQty: 500, perUnit: 0.040 }, { maxQty: 1000, perUnit: 0.009 }, { maxQty: Infinity, perUnit: 0.007 }] },
+  2: { fixe: 26, tiers: [{ maxQty: 100, perUnit: 0.060 }, { maxQty: 250, perUnit: 0.060 }, { maxQty: 500, perUnit: 0.048 }, { maxQty: 1000, perUnit: 0.0108 }, { maxQty: Infinity, perUnit: 0.0084 }] },
+  3: { fixe: 33, tiers: [{ maxQty: 100, perUnit: 0.072 }, { maxQty: 250, perUnit: 0.072 }, { maxQty: 500, perUnit: 0.0576 }, { maxQty: 1000, perUnit: 0.01296 }, { maxQty: Infinity, perUnit: 0.01008 }] },
+  4: { fixe: 37, tiers: [{ maxQty: 100, perUnit: 0.0864 }, { maxQty: 250, perUnit: 0.0864 }, { maxQty: 500, perUnit: 0.06912 }, { maxQty: 1000, perUnit: 0.01555 }, { maxQty: Infinity, perUnit: 0.01210 }] },
+};
+
+// ── Digital brochure cutting cost table (Tableau_Façonnage_Num) ───────────────
+// Applied to brochures after collation/stapling.
+const DIGITAL_BROCHURE_CUT_TABLE = {
+  fixe: 10,
+  tiers: [
+    { maxQty: 100,      perUnit: 0.07 },
+    { maxQty: 200,      perUnit: 0.06 },
+    { maxQty: 300,      perUnit: 0.05 },
+    { maxQty: 400,      perUnit: 0.04 },
+    { maxQty: Infinity, perUnit: 0.03 },
+  ],
+};
+
+function calcDigitalFoldCost(numFolds: number, quantity: number): number {
+  if (numFolds <= 0) return 0;
+  const tableRow = DIGITAL_FOLD_TABLE[Math.min(numFolds, 4)];
+  if (!tableRow) return 0;
+  const tier = tableRow.tiers.find(t => quantity <= t.maxQty) ?? tableRow.tiers[tableRow.tiers.length - 1];
+  return tableRow.fixe + quantity * tier.perUnit;
+}
+
+function calcDigitalBrochureCutCost(quantity: number): number {
+  const tier = DIGITAL_BROCHURE_CUT_TABLE.tiers.find(t => quantity <= t.maxQty)
+    ?? DIGITAL_BROCHURE_CUT_TABLE.tiers[DIGITAL_BROCHURE_CUT_TABLE.tiers.length - 1];
+  return DIGITAL_BROCHURE_CUT_TABLE.fixe + quantity * tier.perUnit;
+}
+
 export interface DigitalInput {
   // Product
   productType: "BROCHURE" | "DEPLIANT" | "FLYER" | "CARTE_DE_VISITE";
@@ -41,6 +86,8 @@ export interface DigitalInput {
   pagesInterior: number;   // 0 for flat
   hasCover: boolean;
   rectoVerso: boolean;
+  /** Number of folds (for flat products like depliants) */
+  foldCount?: number;
 
   // Paper
   interiorGrammageData: PaperGrammageData;
@@ -61,6 +108,12 @@ export interface DigitalInput {
   // Config
   config: DigitalConfig;
   clickDivisors: FormatClickDivisor[];
+  /** Number of models (for cutting cost); flat products only */
+  numModels?: number;
+  /** Number of poses/forms (for cutting cost); flat products only */
+  numPoses?: number;
+  /** Packaging cost (conditionnement) from engine */
+  packagingCost?: number;
 }
 
 export interface DigitalBreakdown {
@@ -72,7 +125,11 @@ export interface DigitalBreakdown {
   fileProcessing: number;
   bindingCost: number;
   laminationCost: number;
+  cuttingCost: number;
+  foldCost: number;
   packagingCost: number;
+  /** When using XLSM model: (paper + clicks) × 1.50 */
+  paperAndClicksMarkedUp: number;
   subtotal: number;
   deliveryCost: number;
   margin: number;
@@ -160,7 +217,9 @@ export function calcDigitalPrice(input: DigitalInput): DigitalBreakdown {
   const { quantity, widthCm, heightCm, pagesInterior, hasCover, rectoVerso,
     interiorGrammageData, coverGrammageData,
     colorModePlatesPerSide, bindingTypeName, bindingDigitalTiers,
-    laminationMode, laminationTiers, config, clickDivisors } = input;
+    laminationMode, laminationTiers, config, clickDivisors,
+    foldCount = 0,
+    numModels = 1, numPoses = 1 } = input;
 
   // --- Clicks ---
   let clicksInterior = 0;
@@ -173,7 +232,7 @@ export function calcDigitalPrice(input: DigitalInput): DigitalBreakdown {
     clicksInterior = calcClicksFlat(clickDivisors, widthCm, heightCm, quantity, rectoVerso);
   }
 
-  // --- Click costs ---
+  // --- Click costs (XLSM rates: 0.03 color, 0.0065 mono) ---
   const clickCostInterior = calcClickCost(clicksInterior, colorModePlatesPerSide, config);
   const clickCostCover = hasCover ? calcClickCost(clicksCover, 4, config) : 0; // cover always CMYK
 
@@ -183,18 +242,23 @@ export function calcDigitalPrice(input: DigitalInput): DigitalBreakdown {
     ? calcPaperCostDigital({ sheetsCount: clicksCover, grammageData: coverGrammageData })
     : 0;
 
-  // --- Setup cost ---
-  const setupCost = (config.setupColor + config.setupMono) / config.setupDivisor;
-  const fileProcessing = quantity > 0 ? config.fileProcessing : 0;
+  // --- Setup cost: XLSM has no digital setup (0) ---
+  const setupCost = config.setupDivisor > 0 && (config.setupColor > 0 || config.setupMono > 0)
+    ? (config.setupColor + config.setupMono) / config.setupDivisor
+    : 0;
 
-  // --- Binding cost ---
+  // --- File processing (frais de dossiers): 45 brochures, 10 flat ---
+  const fileProcessing = quantity > 0
+    ? (hasCover ? config.fileProcessing : (config.fileProcessingFlat ?? config.fileProcessing))
+    : 0;
+
+  // --- Binding cost: XLSM Piqûre <200: calage 35 + qty×0.28; ≥200: calage 25 + qty×0.24 ---
   let bindingCost = 0;
   if (hasCover && bindingTypeName) {
-    if (bindingTypeName === "Piqure") {
-      if (quantity >= 200) bindingCost = quantity * 0.23 + 10;
-      else bindingCost = quantity * 0.25 + 30;
+    if (bindingTypeName === "Piqure" || bindingTypeName === "Piqûre") {
+      if (quantity >= 200) bindingCost = 25 + quantity * 0.24;
+      else bindingCost = 35 + quantity * 0.28;
     } else {
-      // Dos carre tiers
       const tier = findDigitalBindingTier(bindingDigitalTiers, pagesInterior, quantity);
       if (tier) bindingCost = tier.setupCost + quantity * tier.perUnitCost;
     }
@@ -203,7 +267,6 @@ export function calcDigitalPrice(input: DigitalInput): DigitalBreakdown {
   // --- Lamination cost ---
   let laminationCost = 0;
   if (laminationMode !== "Rien") {
-    // For lamination, sheet count = cover sheets (or flat sheets)
     const laminationSheets = hasCover ? clicksCover : clicksInterior;
     const multiplier = laminationMode === "Pelliculage Recto Verso" ? 2 : 1;
     const totalSheets = laminationSheets * multiplier;
@@ -211,19 +274,46 @@ export function calcDigitalPrice(input: DigitalInput): DigitalBreakdown {
     if (tier) laminationCost = tier.setupCost + totalSheets * tier.pricePerSheet;
   }
 
-  const packagingCost = 0; // TODO: implement packaging cost if needed
+  // --- Digital fold cost (flat products: depliants) ---
+  // Uses Tableau_Façonnage_Num tiered per-unit costs + fixed setup
+  const foldCost = !hasCover && foldCount > 0 ? calcDigitalFoldCost(foldCount, quantity) : 0;
+
+  // --- Cutting cost ---
+  // Flat products: per pose + per model (existing model)
+  // Brochures: tiered per-unit + 10 EUR fixed (Tableau_Façonnage_Num "Prix coupe")
+  let cuttingCost = 0;
+  if (!hasCover && ((config.cuttingCostPerPose ?? 0) > 0 || (config.cuttingCostPerModel ?? 0) > 0)) {
+    cuttingCost = (numPoses || 1) * (config.cuttingCostPerPose ?? 0) + (numModels || 1) * (config.cuttingCostPerModel ?? 0);
+  } else if (hasCover) {
+    cuttingCost = calcDigitalBrochureCutCost(quantity);
+  }
+
+  const packagingCostInput = input.packagingCost ?? 0;
   const deliveryCost = 0;  // Added by engine.ts
 
-  const subtotal = clickCostInterior + clickCostCover + paperCostInterior + paperCostCover
-    + setupCost + fileProcessing + bindingCost + laminationCost + packagingCost;
-  const margin = subtotal * 0.05; // 5% — actual rate from config, applied by engine
-  const total = (subtotal + deliveryCost) * 1.05;
+  const paperAndClicks = paperCostInterior + paperCostCover + clickCostInterior + clickCostCover;
+  const otherCosts = setupCost + fileProcessing + bindingCost + laminationCost + cuttingCost + foldCost + packagingCostInput;
+
+  // XLSM model: (paper + clicks) × 1.50 + other costs; brochures can use no markup to match Excel.
+  const multiplier = config.digitalMarkupMultiplier ?? 0;
+  const applyMarkupToBrochures = false; // Excel brochure numérique: subtotal = paper+clics+other (no ×1.50)
+  const useMarkupHere = multiplier > 0 && (!input.hasCover || applyMarkupToBrochures);
+  const paperAndClicksMarkedUp = useMarkupHere ? paperAndClicks * multiplier : paperAndClicks;
+  let subtotal = useMarkupHere ? paperAndClicksMarkedUp + otherCosts : paperAndClicks + otherCosts;
+
+  // Minimum billing for flat products (depliants/flyers)
+  const minFlat = !hasCover ? (config.minimumBillingFlat ?? 0) : 0;
+  if (minFlat > 0 && subtotal < minFlat) subtotal = minFlat;
+
+  const margin = useMarkupHere ? 0 : subtotal * 0.05; // legacy margin when not using markup
+  const total = (subtotal + deliveryCost) * (useMarkupHere ? 1 : 1.05);
 
   return {
     clickCostInterior, clickCostCover,
     paperCostInterior, paperCostCover,
     setupCost, fileProcessing,
-    bindingCost, laminationCost, packagingCost,
+    bindingCost, laminationCost, cuttingCost, foldCost, packagingCost: packagingCostInput,
+    paperAndClicksMarkedUp: useMarkupHere ? paperAndClicksMarkedUp : 0,
     subtotal, deliveryCost, margin, total,
   };
 }

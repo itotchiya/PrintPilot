@@ -33,7 +33,7 @@ export interface QuoteInput {
   openFormat: { widthCm: number; heightCm: number } | null;
   // Step 3 (brochures only)
   pagesInterior: number | null;
-  pagesCover: number; // always 4 for brochures, 0 otherwise
+  pagesCover: number; // 0 = pas de couverture, 2 = recto seul, 4 = recto verso (brochures)
   flapSizeCm: number; // 0 = no flaps
   // Step 4
   paperInteriorTypeId: string | null;

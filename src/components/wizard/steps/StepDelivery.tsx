@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { blurActiveElement, onWizardSelectTriggerPointerDown } from "../selectBlurFix";
 import { Separator } from "@/components/ui/separator";
 import { PlusCircle, Trash2 } from "lucide-react";
 import { canHaveCrystalBox } from "@/lib/pricing/product-rules";
@@ -25,14 +26,37 @@ interface Department {
   displayName: string;
 }
 
+const FALLBACK_DEPARTMENTS: Department[] = [
+  { id: "fb-d-75", code: "75", name: "Paris", zone: 3, displayName: "75 - Paris" },
+  { id: "fb-d-69", code: "69", name: "Rhone", zone: 4, displayName: "69 - Rhone" },
+  { id: "fb-d-13", code: "13", name: "Bouches-du-Rhone", zone: 5, displayName: "13 - Bouches-du-Rhone" },
+  { id: "fb-d-33", code: "33", name: "Gironde", zone: 5, displayName: "33 - Gironde" },
+  { id: "fb-d-59", code: "59", name: "Nord", zone: 3, displayName: "59 - Nord" },
+  { id: "fb-d-31", code: "31", name: "Haute-Garonne", zone: 5, displayName: "31 - Haute-Garonne" },
+];
+
+function parseDepartments(raw: unknown): Department[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((d: Record<string, unknown>) => ({
+    id: String(d.id ?? d.code ?? ""),
+    code: String(d.code ?? ""),
+    name: String(d.name ?? ""),
+    zone: Number(d.zone) ?? 3,
+    displayName: String(d.displayName ?? d.name ?? `${d.code} - ${d.name}`),
+  })).filter((x) => x.id && x.code);
+}
+
 export function StepDelivery({ data, updateData }: StepProps) {
   const [departments, setDepartments] = useState<Department[]>([]);
 
   useEffect(() => {
     fetch("/api/admin/config/delivery")
-      .then((r) => r.json())
-      .then(setDepartments)
-      .catch(() => {});
+      .then((r) => (r.ok ? r.json() : []))
+      .then((raw: unknown) => {
+        const list = parseDepartments(raw);
+        setDepartments(list.length > 0 ? list : FALLBACK_DEPARTMENTS);
+      })
+      .catch(() => setDepartments(FALLBACK_DEPARTMENTS));
   }, []);
 
   const totalCopies = data.deliveryPoints.reduce((s, p) => s + p.copies, 0);
@@ -223,11 +247,12 @@ export function StepDelivery({ data, updateData }: StepProps) {
                     <Select
                       value={deptId}
                       onValueChange={(v) => handleDepartmentChange(index, v)}
+                      onOpenChange={(open) => open && blurActiveElement()}
                     >
-                      <SelectTrigger className="h-9">
+                      <SelectTrigger className="h-9" onPointerDown={onWizardSelectTriggerPointerDown}>
                         <SelectValue placeholder="Choisir le département…" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" sideOffset={4} className="z-[100]">
                         {departments.map((d) => (
                           <SelectItem key={d.id} value={d.id}>
                             {d.displayName}
