@@ -138,7 +138,7 @@ async function main() {
   console.log(`📄 ${Object.keys(paperTypes).length} paper types created`);
 
   // ── 3. Paper Grammages ───────────────────────────────────────────────────
-  type GrammageEntry = { grammage: number; pricePerKg: number };
+  type GrammageEntry = { grammage: number; pricePerKg: number; thicknessPer100?: number };
 
   const standardGrammages: GrammageEntry[] = [80, 90, 100, 115, 130, 135, 150, 170, 200, 250, 300, 350].map(
     (g) => ({ grammage: g, pricePerKg: 1.0 })
@@ -226,6 +226,7 @@ async function main() {
           grammage: entry.grammage,
           pricePerKg: entry.pricePerKg,
           weightPer1000Sheets: WEIGHT_MAP[entry.grammage] ?? null,
+          thicknessPer100: entry.thicknessPer100 ?? (entry.grammage / 100) * (paperName.includes("Brillant") ? 0.8 : paperName.includes("Offset") ? 1.2 : 1.0),
         },
       });
       grammageCount++;
@@ -272,16 +273,33 @@ async function main() {
 
   // ── 6. Binding Types + Digital Price Tiers ───────────────────────────────
   const bindingTypesData = [
-    { name: "Piqure", minPages: 4, maxPages: 96 },
-    { name: "Dos carre colle", minPages: 40, maxPages: null },
-    { name: "Dos carre colle PUR", minPages: 40, maxPages: null },
-    { name: "Dos carre colle avec couture", minPages: 40, maxPages: null },
+    { name: "Spiro", minPages: 2, maxPages: 200, rules: {} },
+    { name: "Piqure boucle", minPages: 4, maxPages: 64, rules: {} },
+    { name: "WireO", minPages: 2, maxPages: 250, rules: {} },
+    { name: "Sans", minPages: 1, maxPages: Infinity, rules: {} },
+    { name: "Piqure", minPages: 4, maxPages: 96, rules: {} },
+    { name: "Dos carre colle", minPages: 40, maxPages: null, rules: {
+      extremeSpinePenalty: 0.20 // +20% for <0.3cm or >3.0cm
+    }},
+    { name: "Dos carre colle PUR", minPages: 40, maxPages: null, rules: {
+      extremeSpinePenalty: 0.20,
+      heavyPaperPenalty: { minGrammage: 171, penalty: 0.15 }, // +15% for >170g
+      coucheMatPenalty: { minGrammage: 116, penalty: 0.10 },  // +10% for Couché Mat >115g
+      coucheSatinPenalty: { minGrammage: 116, penalty: 0.05 }, // +5% for Couché Satin >115g
+      lightPaperPenalty: { maxGrammage: 69, penalty: 0.20 } // +20% for <70g
+    }},
+    { name: "Dos carre colle avec couture", minPages: 40, maxPages: null, rules: {
+      extremeSpinePenalty: 0.20,
+      coucheMatPenalty: { minGrammage: 116, penalty: 0.15 },
+      coucheSatinPenalty: { minGrammage: 116, penalty: 0.05 },
+      lightPaperPenalty: { maxGrammage: 69, penalty: 0.20 }
+    }},
   ];
 
   const bindingTypes: Record<string, { id: string }> = {};
   for (const bt of bindingTypesData) {
     let row = await prisma.bindingType.findFirst({ where: { fournisseurId: null, name: bt.name } });
-    if (!row) row = await prisma.bindingType.create({ data: { ...bt } });
+    if (!row) row = await prisma.bindingType.create({ data: bt });
     bindingTypes[bt.name] = row;
   }
   console.log(`📎 ${Object.keys(bindingTypes).length} binding types created`);
@@ -339,13 +357,11 @@ async function main() {
 
   // Piqure (2 points métal) — digital price tiers
   // Source: Tableau_Façonnage_Num.csv lines 15-20
+  // Piqure digital tiers — Source: Tableau_Façonnage_Num.csv lines 22-25
+  // XLSM has exactly 2 tiers: <200 qty and ≥200 qty
   const piqureDigitalTiers: BindingTier[] = [
-    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 25, qtyMax: 50, perUnitCost: 0.14, setupCost: 35 },
-    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 50, qtyMax: 100, perUnitCost: 0.14, setupCost: 35 },
-    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 100, qtyMax: 200, perUnitCost: 0.12, setupCost: 35 },
-    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 200, qtyMax: 300, perUnitCost: 0.10, setupCost: 35 },
-    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 300, qtyMax: 500, perUnitCost: 0.085, setupCost: 35 },
-    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 500, qtyMax: 99999, perUnitCost: 0.07, setupCost: 35 },
+    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 1, qtyMax: 199, perUnitCost: 0.28, setupCost: 35 },
+    { pageRangeMin: 4, pageRangeMax: 96, qtyMin: 200, qtyMax: 99999, perUnitCost: 0.24, setupCost: 25 },
   ];
 
   for (const tier of piqureDigitalTiers) {
@@ -497,6 +513,7 @@ async function main() {
     { name: "Pli Roule", maxFolds: 6, canBeSecondary: false },
     { name: "Pli Accordeon", maxFolds: 6, canBeSecondary: false },
     { name: "Pli Croise", maxFolds: 6, canBeSecondary: true },
+    { name: "Pli Economique", maxFolds: 4, canBeSecondary: false },
   ];
 
   // XLSM Tableau_Façonnage_OFFSET: these are per-1000 rates (roulage/1000).
@@ -538,10 +555,12 @@ async function main() {
   console.log(`✨ ${laminationModes.length} lamination modes created`);
 
   // ── 9. Lamination Finishes + Digital Tiers ───────────────────────────────
+  // Source: Tableau_Façonnage_OFFSET.csv — Pelliculage IMB section
+  // Brillant = 0.25 €/m², Mat = 0.30 €/m², Soft Touch = 0.50 €/m²
   const laminationFinishesData = [
-    { name: "Brillant", offsetPricePerM2: 0.14, offsetCalageForfait: 55.0, offsetMinimumBilling: 60.0 },
-    { name: "Mat", offsetPricePerM2: 0.16, offsetCalageForfait: 55.0, offsetMinimumBilling: 115.0 },
-    { name: "Soft Touch", offsetPricePerM2: 0.5, offsetCalageForfait: 55.0, offsetMinimumBilling: 115.0 },
+    { name: "Brillant", offsetPricePerM2: 0.25, offsetCalageForfait: 55.0, offsetMinimumBilling: 60.0 },
+    { name: "Mat", offsetPricePerM2: 0.30, offsetCalageForfait: 55.0, offsetMinimumBilling: 115.0 },
+    { name: "Soft Touch", offsetPricePerM2: 0.50, offsetCalageForfait: 55.0, offsetMinimumBilling: 115.0 },
   ];
 
   const laminationDigitalTiers = [
@@ -571,11 +590,13 @@ async function main() {
   );
 
   // ── 10. Packaging Options ────────────────────────────────────────────────
+  // Source: Tableau_Façonnage_OFFSET.csv — Conditionnement section
+  // Film: 0.25€/unit (base), Cartons: 0.45€/unit, Elastiques: 0.10€/unit, Crystal: 0.56€/unit
   const packagingData = [
-    { name: "Mise en cartons", type: "CARTON", costPerUnit: 1.0, costPerOrder: 0, appliesTo: ["BROCHURE", "DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
-    { name: "Mise sous film", type: "FILM", costPerUnit: 0.23, costPerOrder: 0, appliesTo: ["BROCHURE", "DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
-    { name: "Mise sous elastiques par paquet", type: "ELASTIQUE", costPerUnit: 0.08, costPerOrder: 0, appliesTo: ["BROCHURE", "DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
-    { name: "Boite cristal", type: "CRYSTAL_BOX", costPerUnit: 0.50, costPerOrder: 0, appliesTo: ["DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
+    { name: "Mise en cartons", type: "CARTON", costPerUnit: 0.45, costPerOrder: 0, appliesTo: ["BROCHURE", "DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
+    { name: "Mise sous film", type: "FILM", costPerUnit: 0.25, costPerOrder: 0, appliesTo: ["BROCHURE", "DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
+    { name: "Mise sous elastiques par paquet", type: "ELASTIQUE", costPerUnit: 0.10, costPerOrder: 0, appliesTo: ["BROCHURE", "DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
+    { name: "Boite cristal", type: "CRYSTAL_BOX", costPerUnit: 0.56, costPerOrder: 0, appliesTo: ["DEPLIANT", "FLYER", "CARTE_DE_VISITE"] },
   ];
 
   for (const pkg of packagingData) {
@@ -833,14 +854,96 @@ async function main() {
     { key: "gache_tirage_pct_8k", value: 0.006, unit: "ratio", description: "Running waste ≤8000 sheets (0.6%)" },
     { key: "gache_tirage_pct_10k", value: 0.008, unit: "ratio", description: "Running waste ≤10000 sheets (0.8%)" },
     { key: "gache_vernis", value: 2, unit: "sheets", description: "Waste sheets for varnish per plate" },
-    { key: "running_cost_tier_1", value: 25.0, unit: "EUR/1000", description: "≤1000 sheets" },
-    { key: "running_cost_tier_2", value: 16.0, unit: "EUR/1000", description: "1001-3000 sheets" },
+    { key: "running_cost_tier_1", value: 15.0, unit: "EUR/1000", description: "≤1000 sheets (XLSM: 15)" },
+    { key: "running_cost_tier_2", value: 15.0, unit: "EUR/1000", description: "1001-3000 sheets (XLSM: 15)" },
     { key: "running_cost_tier_3", value: 15.0, unit: "EUR/1000", description: "3001-5000 sheets" },
     { key: "running_cost_tier_4", value: 15.0, unit: "EUR/1000", description: "5001-10000 sheets" },
     { key: "running_cost_tier_5", value: 15.0, unit: "EUR/1000", description: "10001-12000 sheets" },
     { key: "running_cost_tier_6", value: 15.0, unit: "EUR/1000", description: ">12000 sheets (XLSM 6th tier)" },
-    { key: "running_cost_vernis", value: 22.0, unit: "EUR/1000", description: "Varnish running cost per 1000 tours (XLSM)" },
+    { key: "running_cost_vernis", value: 22.0, unit: "EUR/1000", description: "Varnish running cost per 1000 tours (XLSM: 22)" },
     { key: "gache_recherche_teinte", value: 100, unit: "sheets", description: "Waste sheets for color matching" },
+    { key: "fixed_setup_flat", value: 50.0, unit: "EUR", description: "Fixed setup cost for flat products (Cout fixe)" },
+
+    // ── Rainage (creasing) tiers — §4.10, Façonnage_OFFSET rows 29-30 ──
+    { key: "rainage_calage_1", value: 25, unit: "EUR", description: "Rainage calage for 1 cahier" },
+    { key: "rainage_roulage_1", value: 17, unit: "EUR/1000", description: "Rainage roulage/1000 for 1 cahier" },
+    { key: "rainage_calage_2", value: 25, unit: "EUR", description: "Rainage calage for 2 cahiers" },
+    { key: "rainage_roulage_2", value: 35, unit: "EUR/1000", description: "Rainage roulage/1000 for 2 cahiers" },
+    { key: "rainage_calage_3", value: 25, unit: "EUR", description: "Rainage calage for 3 cahiers" },
+    { key: "rainage_roulage_3", value: 45, unit: "EUR/1000", description: "Rainage roulage/1000 for 3 cahiers" },
+    { key: "rainage_calage_4", value: 25, unit: "EUR", description: "Rainage calage for 4 cahiers" },
+    { key: "rainage_roulage_4", value: 50, unit: "EUR/1000", description: "Rainage roulage/1000 for 4 cahiers" },
+    { key: "rainage_calage_5", value: 35, unit: "EUR", description: "Rainage calage for 5 cahiers" },
+    { key: "rainage_roulage_5", value: 75, unit: "EUR/1000", description: "Rainage roulage/1000 for 5 cahiers" },
+    { key: "rainage_calage_6", value: 35, unit: "EUR", description: "Rainage calage for 6 cahiers" },
+    { key: "rainage_roulage_6", value: 95, unit: "EUR/1000", description: "Rainage roulage/1000 for 6 cahiers" },
+    { key: "rainage_calage_7", value: 55, unit: "EUR", description: "Rainage calage for 7+ cahiers" },
+    { key: "rainage_roulage_7", value: 120, unit: "EUR/1000", description: "Rainage roulage/1000 for 7+ cahiers" },
+
+    // ── Binding supplement rates — Façonnage_OFFSET rows 25-38 ──
+    { key: "supplement_papier_lt70g", value: 0.20, unit: "ratio", description: "Binding surcharge: interior paper <70g (+20%)" },
+    { key: "supplement_couche_satin_gt115g", value: 0.05, unit: "ratio", description: "Binding surcharge: couché satin >115g (+5%)" },
+    { key: "supplement_couche_mat_gt115g", value: 0.15, unit: "ratio", description: "Binding surcharge: couché mat >115g (+15%)" },
+    { key: "supplement_1_encart", value: 0.05, unit: "ratio", description: "Binding surcharge: 1 cahier encarté (+5%)" },
+    { key: "supplement_2_encarts", value: 0.10, unit: "ratio", description: "Binding surcharge: 2+ cahiers encartés (+10%)" },
+    { key: "supplement_dos_hors_range", value: 0.20, unit: "ratio", description: "Binding surcharge: spine <3mm or >35mm (+20%)" },
+    { key: "supplement_cahiers_melanges", value: 0.20, unit: "ratio", description: "Binding surcharge: mixed cahiers (+20%)" },
+    // Binding supplement thresholds
+    { key: "supplement_grammage_min", value: 70, unit: "g/m²", description: "Grammage threshold for <70g surcharge" },
+    { key: "supplement_couche_grammage_min", value: 115, unit: "g/m²", description: "Grammage threshold for couché surcharges" },
+    { key: "supplement_dos_min_mm", value: 3, unit: "mm", description: "Min spine thickness for normal range" },
+    { key: "supplement_dos_max_mm", value: 35, unit: "mm", description: "Max spine thickness for normal range" },
+    { key: "supplement_papier_gt170g", value: 0.15, unit: "ratio", description: "Binding surcharge PUR: interior >170g (+15%)" },
+
+    // ── Finishing extras — UV Varnish (§11) ──
+    { key: "uv_rate_small_per_mille", value: 170, unit: "EUR/1000", description: "UV varnish rate/1000 for format <50×70" },
+    { key: "uv_rate_large_per_mille", value: 130, unit: "EUR/1000", description: "UV varnish rate/1000 for format ≥50×70" },
+    { key: "uv_calage_small", value: 160, unit: "EUR", description: "UV varnish calage for sheet area <35×50" },
+    { key: "uv_calage_medium", value: 260, unit: "EUR", description: "UV varnish calage for 35×50 to 50×70" },
+    { key: "uv_calage_large", value: 350, unit: "EUR", description: "UV varnish calage for >50×70" },
+    { key: "uv_small_max_width", value: 50, unit: "cm", description: "UV small format max width threshold" },
+    { key: "uv_small_max_height", value: 70, unit: "cm", description: "UV small format max height threshold" },
+
+    // ── Finishing extras — Encart jeté (§12) ──
+    { key: "encart_aleatoire_per_mille", value: 37, unit: "EUR/1000", description: "Random insert cost per 1000" },
+    { key: "encart_non_aleatoire_per_mille", value: 50, unit: "EUR/1000", description: "Positioned insert cost per 1000" },
+
+    // ── Finishing extras — Recassage (§13) ──
+    { key: "recassage_calage", value: 26, unit: "EUR", description: "Recassage calage forfait" },
+    { key: "recassage_roulage_per_mille", value: 13, unit: "EUR/1000", description: "Recassage roulage per 1000" },
+
+    // ── Finishing extras — Rabats (§4.11) ──
+    { key: "rabat_1_volet_per_mille", value: 50, unit: "EUR/1000", description: "1 flap cost per 1000" },
+    { key: "rabat_2_volets_per_mille", value: 70, unit: "EUR/1000", description: "2 flaps cost per 1000" },
+
+    // ── Packaging defaults — Conditionnement ──
+    { key: "film_rate_1x", value: 0.25, unit: "EUR/unit", description: "Film wrapping per unit (1x)" },
+    { key: "film_rate_2x", value: 0.17, unit: "EUR/unit", description: "Film wrapping per unit (2x pack)" },
+    { key: "film_rate_3x", value: 0.12, unit: "EUR/unit", description: "Film wrapping per unit (3x pack)" },
+    { key: "film_rate_4x", value: 0.10, unit: "EUR/unit", description: "Film wrapping per unit (4+ pack)" },
+    { key: "film_rate_10x", value: 0.08, unit: "EUR/unit", description: "Film wrapping per unit (10+ pack)" },
+    { key: "cartons_kg_per_carton", value: 10, unit: "kg", description: "Weight capacity per carton" },
+    { key: "cartons_price_per_unit", value: 1.0, unit: "EUR", description: "Default carton price" },
+    { key: "palette_price_per_unit", value: 10, unit: "EUR", description: "Cost per palette" },
+    { key: "palette_weight_threshold", value: 500, unit: "kg", description: "Weight threshold for additional palettes" },
+    { key: "elastiques_minimum", value: 5, unit: "EUR", description: "Minimum elastiques cost" },
+    { key: "elastiques_per_unit", value: 0.01, unit: "EUR", description: "Elastiques cost per unit" },
+    { key: "crystal_box_per_unit", value: 2.22, unit: "EUR", description: "Crystal box minimum per box" },
+
+    // ── Cover supplement ──
+    { key: "cover_supplement_per_mille", value: 13, unit: "EUR/1000", description: "Cover calage supplement per 1000 for binding" },
+
+    // ── Pli (fold) calage forfait ──
+    { key: "fold_calage_forfait", value: 20, unit: "EUR", description: "Fold calage forfait (fixed cost)" },
+
+    // ── Per-component discount rates (XLSM Détails PRIX remise system) ──
+    // These apply AFTER computing each cost component: final = base × (1 - discount)
+    { key: "discount_plates", value: 0.25, unit: "ratio", description: "Plate cost discount (XLSM: 25% off)" },
+    { key: "discount_calage", value: 0.10, unit: "ratio", description: "Calage cost discount (XLSM: 10% off)" },
+    { key: "discount_roulage", value: 0.10, unit: "ratio", description: "Roulage cost discount (XLSM: 10% off)" },
+    { key: "discount_fichiers", value: 0.50, unit: "ratio", description: "File processing discount (XLSM: 50% off)" },
+    { key: "discount_faconnage", value: 0.10, unit: "ratio", description: "Binding/finishing discount (XLSM: 10% off)" },
+    { key: "discount_pelliculage", value: 0.0, unit: "ratio", description: "Lamination discount (XLSM: 0% off)" },
   ];
 
   for (const cfg of offsetConfigData) {
@@ -866,6 +969,7 @@ async function main() {
     { key: "minimum_billing_flat", value: 25.0, unit: "EUR", description: "Minimum billing flat products" },
     { key: "cutting_cost_per_pose", value: 0.85, unit: "EUR", description: "Cutting cost per pose" },
     { key: "cutting_cost_per_model", value: 1.25, unit: "EUR", description: "Cutting cost per model" },
+    { key: "brochure_digital_margin", value: 0.10, unit: "ratio", description: "Brochure digital margin rate (10%, XLSM §4.4)" },
   ];
 
   for (const cfg of digitalConfigData) {
@@ -880,9 +984,9 @@ async function main() {
 
   // ── 15. Margin Config ────────────────────────────────────────────────────
   const marginConfigData = [
-    { key: "digital_final_margin", value: 0.05, unit: "ratio", description: "5% applied to total digital price" },
-    { key: "offset_final_margin", value: 0.07, unit: "ratio", description: "7% applied to total offset price" },
-    { key: "paper_margin", value: 0.15, unit: "ratio", description: "15% markup on paper costs (offset, XLSM)" },
+    { key: "digital_markup", value: 1.05, unit: "multiplier", description: "Global markup for digital products default (Excel: * 1.05)" },
+    { key: "offset_markup", value: 1.07, unit: "multiplier", description: "Global markup for offset products default (Excel: * 1.07)" },
+    { key: "paper_margin", value: 0.10, unit: "ratio", description: "10% markup on paper costs (XLSM: 0.10)" },
   ];
 
   for (const cfg of marginConfigData) {
@@ -897,12 +1001,12 @@ async function main() {
 
   // ── 16. Machine Formats ──────────────────────────────────────────────────
   const machineFormatsData = [
-    { name: "32x45", widthCm: 32, heightCm: 45, isDefault: false },
-    { name: "45x64", widthCm: 45, heightCm: 64, isDefault: false },
-    { name: "64x90", widthCm: 64, heightCm: 90, isDefault: false },
-    { name: "65x92", widthCm: 65, heightCm: 92, isDefault: true },
-    { name: "70x102", widthCm: 70, heightCm: 102, isDefault: false },
-    { name: "72x102", widthCm: 72, heightCm: 102, isDefault: false },
+    { name: "32x45", widthCm: 32, heightCm: 45, isDefault: false, defaultWasteRatio: 0.02, wasteTiers: [{ max: 3000, ratio: 0.05 }], runningCostTiers: [{ max: 1000, cost: 25 }, { max: 3000, cost: 15 }] },
+    { name: "45x64", widthCm: 45, heightCm: 64, isDefault: false, defaultWasteRatio: 0.02, wasteTiers: [{ max: 3000, ratio: 0.05 }], runningCostTiers: [{ max: 1000, cost: 25 }, { max: 3000, cost: 15 }] },
+    { name: "64x90", widthCm: 64, heightCm: 90, isDefault: false, defaultWasteRatio: 0.02, wasteTiers: [{ max: 3000, ratio: 0.05 }], runningCostTiers: [{ max: 1000, cost: 25 }, { max: 3000, cost: 15 }] },
+    { name: "65x92", widthCm: 65, heightCm: 92, isDefault: true, defaultWasteRatio: 0.02, wasteTiers: [{ max: 3000, ratio: 0.002 }], runningCostTiers: [{ max: 1000, cost: 25 }, { max: 3000, cost: 15 }] }, // Komori
+    { name: "70x102", widthCm: 70, heightCm: 102, isDefault: false, defaultWasteRatio: 0.02, wasteTiers: [{ max: 3000, ratio: 0.002 }], runningCostTiers: [{ max: 1000, cost: 15 }, { max: 3000, cost: 15 }] },
+    { name: "72x102", widthCm: 72, heightCm: 102, isDefault: false, defaultWasteRatio: 0.02, wasteTiers: [{ max: 3000, ratio: 0.05 }], runningCostTiers: [{ max: 1000, cost: 25 }, { max: 3000, cost: 15 }] }, // Roland
   ];
 
   for (const mf of machineFormatsData) {
@@ -913,6 +1017,38 @@ async function main() {
 
   // ── 17. Format Click Divisors ────────────────────────────────────────────
   const formatClickDivisorsData = [
+    { formatName: "A4 Francaise", divisorRecto: 1, divisorRectoVerso: 2 },
+    { formatName: "A4 Paysage", divisorRecto: 1, divisorRectoVerso: 2 },
+    { formatName: "A5 Francaise", divisorRecto: 2, divisorRectoVerso: 4 },
+    { formatName: "A5 Paysage", divisorRecto: 2, divisorRectoVerso: 4 },
+    { formatName: "A6 Francaise", divisorRecto: 4, divisorRectoVerso: 8 },
+  ];
+
+  for (const fcd of formatClickDivisorsData) {
+    const row = await prisma.formatClickDivisor.findFirst({ where: { fournisseurId: null, formatName: fcd.formatName } });
+    if (!row) await prisma.formatClickDivisor.create({ data: { ...fcd } });
+  }
+  console.log(`🧮 ${formatClickDivisorsData.length} format click divisors created`);
+
+  // ── 18. Digital Cut Tiers (Numérique Coupe) ──────────────────────────────
+  const digitalCutTiersData = [
+    { productType: "BROCHURE" as const, qtyMax: 100, perUnitCost: 0.07, setupCost: 10.0 },
+    { productType: "BROCHURE" as const, qtyMax: 200, perUnitCost: 0.06, setupCost: 10.0 },
+    { productType: "BROCHURE" as const, qtyMax: 300, perUnitCost: 0.05, setupCost: 10.0 },
+    { productType: "BROCHURE" as const, qtyMax: 400, perUnitCost: 0.04, setupCost: 10.0 },
+    { productType: "BROCHURE" as const, qtyMax: 50000, perUnitCost: 0.03, setupCost: 10.0 },
+    { productType: "FLYER" as const, qtyMax: 500, perUnitCost: 0.0008, setupCost: 10.0 },
+    { productType: "FLYER" as const, qtyMax: 1000, perUnitCost: 0.0007, setupCost: 10.0 },
+    { productType: "FLYER" as const, qtyMax: 2500, perUnitCost: 0.0005, setupCost: 10.0 },
+    { productType: "FLYER" as const, qtyMax: 50000, perUnitCost: 0.0004, setupCost: 10.0 },
+  ];
+
+  await prisma.digitalCutTier.deleteMany();
+  for (const dct of digitalCutTiersData) {
+    await prisma.digitalCutTier.create({ data: dct });
+  }
+  console.log(`✂️  ${digitalCutTiersData.length} digital cut tiers created`);
+  const formatClickDivisorsData2 = [
     { formatName: "5.5x8.5", divisorRecto: 25, divisorRectoVerso: 12.5 },
     { formatName: "10x15", divisorRecto: 8, divisorRectoVerso: 4 },
     { formatName: "10x21", divisorRecto: 6, divisorRectoVerso: 3 },
@@ -922,11 +1058,11 @@ async function main() {
     { formatName: "29.7x42", divisorRecto: 1, divisorRectoVerso: 0.5 },
   ];
 
-  for (const fcd of formatClickDivisorsData) {
+  for (const fcd of formatClickDivisorsData2) {
     const row = await prisma.formatClickDivisor.findFirst({ where: { fournisseurId: null, formatName: fcd.formatName } });
     if (!row) await prisma.formatClickDivisor.create({ data: { ...fcd } });
   }
-  console.log(`🔢 ${formatClickDivisorsData.length} format click divisors created`);
+  console.log(`🔢 ${formatClickDivisorsData2.length} format click divisors created`);
 
   // ── 18. Copy default config to Fournisseur (demo placeholder) ─────────────
   const fid = admin.id;

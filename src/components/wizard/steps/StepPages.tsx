@@ -24,9 +24,9 @@ interface BindingType {
 
 const FALLBACK_BINDINGS: BindingType[] = [
   { id: "fb-b-1", name: "Piqure", minPages: 4, maxPages: 96, active: true },
-  { id: "fb-b-2", name: "Dos carre colle", minPages: 40, maxPages: null, active: true },
-  { id: "fb-b-3", name: "Dos carre colle PUR", minPages: 40, maxPages: null, active: true },
-  { id: "fb-b-4", name: "Dos carre colle avec couture", minPages: 40, maxPages: null, active: true },
+  { id: "fb-b-2", name: "Dos carre colle", minPages: 32, maxPages: null, active: true },
+  { id: "fb-b-3", name: "Dos carre colle PUR", minPages: 32, maxPages: null, active: true },
+  { id: "fb-b-4", name: "Dos carre colle avec couture", minPages: 32, maxPages: null, active: true },
 ];
 
 function parseBindings(raw: unknown): BindingType[] {

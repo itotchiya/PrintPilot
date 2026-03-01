@@ -62,6 +62,13 @@ export interface QuoteInput {
   // Step 7
   packaging: QuotePackaging;
   deliveryPoints: QuoteDeliveryPoint[];
+  // Finishing extras (optional — CLAUDE.md §11-13)
+  uvVarnishMode?: "Rien" | "UV Brillant" | "UV Reserve" | null;
+  encartMode?: "Rien" | "Aléatoire" | "Non aléatoire" | null;
+  recassageEnabled?: boolean;
+  // Binding supplement context (§4.9)
+  encartedCahiers?: number;  // Number of encart cahiers (0-2)
+  hasMixedCahiers?: boolean; // DCC: cahiers/feuillets mélangés
   // Meta
   clientName: string;
   projectName: string;
@@ -99,6 +106,11 @@ export const EMPTY_QUOTE_INPUT: QuoteInput = {
   laminationFinishName: null,
   packaging: { cartons: false, film: false, elastiques: false, crystalBoxQty: 0 },
   deliveryPoints: [{ copies: 0, departmentCode: "", departmentName: "", zone: 0, hayon: false }],
+  uvVarnishMode: null,
+  encartMode: null,
+  recassageEnabled: false,
+  encartedCahiers: 0,
+  hasMixedCahiers: false,
   clientName: "",
   projectName: "",
   notes: "",

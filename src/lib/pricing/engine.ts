@@ -5,11 +5,12 @@ import { calcPosesPerSheet, calcCahierStructure, pickOptimalMachineFormat } from
 import { calcDigitalPrice, getDigitalClicks, getClickDivisorForFormat } from "./digital";
 import type { DigitalInput, DigitalBreakdown } from "./digital";
 import { calcOffsetPrice } from "./offset";
-import type { OffsetInput, OffsetBreakdown } from "./offset";
+import type { OffsetInput, OffsetBreakdown, OffsetBindingRules } from "./offset";
 import { calcDeliveryCost } from "./delivery";
-import type { DeliveryRateData, DepartmentRateData, DeliveryPointResult } from "./delivery";
+import type { DeliveryRateData, DepartmentRateData, DeliveryPointResult, DeliveryPoint } from "./delivery";
 import { calcPackagingCost } from "./packaging";
 import { validateMethodAvailability } from "./method-availability";
+import { calcFinishingExtras } from "./finishing-extras";
 
 /** Safely coerce Prisma Decimal or any value to number; avoids NaN (which JSON serializes to null). */
 function toNum(v: unknown): number {
@@ -53,6 +54,8 @@ export interface PricingResult {
   offsetSuggestion?: string | null;
   /** Name of the cheapest carrier selected for delivery. */
   bestCarrierName?: string;
+  /** Finishing extras breakdown (UV varnish, encart, recassage, rabats). */
+  finishingExtras?: { uvVarnishCost: number; encartCost: number; recassageCost: number; rabatCost: number; total: number };
 }
 
 const DEFAULT_WIDTH_CM = 21;
@@ -105,7 +108,14 @@ export async function calculatePricing(
     prisma.colorMode.findMany({ where: scopeWhere }),
     prisma.bindingType.findMany({
       where: scopeWhere,
-      include: { digitalPriceTiers: true, offsetPriceTiers: true },
+      // Select the rules JSON too
+      select: {
+        id: true,
+        name: true,
+        rules: true,
+        digitalPriceTiers: true,
+        offsetPriceTiers: true
+      }
     }),
     prisma.foldType.findMany({ where: scopeWhere, include: { costs: true } }),
     prisma.laminationFinish.findMany({
@@ -152,6 +162,7 @@ export async function calculatePricing(
     calagePerPlate: cfgVal(offsetConfigRows, "calage_per_plate", 6),
     calageVernis: cfgVal(offsetConfigRows, "calage_vernis", 6),
     rechercheTeintePerPlate: cfgVal(offsetConfigRows, "recherche_teinte", 10),
+    fixedSetupFlat: cfgVal(offsetConfigRows, "fixed_setup_flat", 50),
     fileProcessingPerTreatment: cfgVal(offsetConfigRows, "file_processing_per_treatment", 12.50),
     fileProcessingBase: cfgVal(offsetConfigRows, "file_processing_base", 12.50),
     fileProcessingPerPlate: cfgVal(offsetConfigRows, "file_processing_per_plate", 0),
@@ -162,18 +173,30 @@ export async function calculatePricing(
     gacheTiragePctTier8k: cfgVal(offsetConfigRows, "gache_tirage_pct_8k", 0.006),
     gacheTiragePctTier10k: cfgVal(offsetConfigRows, "gache_tirage_pct_10k", 0.008),
     gacheVernis: cfgVal(offsetConfigRows, "gache_vernis", 2),
-    runningCostTier1: cfgVal(offsetConfigRows, "running_cost_tier_1", 25),
-    runningCostTier2: cfgVal(offsetConfigRows, "running_cost_tier_2", 16),
+    // ── Running cost tiers (XLSM-corrected: all tiers = 15 €/1000) ──
+    runningCostTier1: cfgVal(offsetConfigRows, "running_cost_tier_1", 15),
+    runningCostTier2: cfgVal(offsetConfigRows, "running_cost_tier_2", 15),
     runningCostTier3: cfgVal(offsetConfigRows, "running_cost_tier_3", 15),
     runningCostTier4: cfgVal(offsetConfigRows, "running_cost_tier_4", 15),
     runningCostTier5: cfgVal(offsetConfigRows, "running_cost_tier_5", 15),
     runningCostTier6: cfgVal(offsetConfigRows, "running_cost_tier_6", 15),
-    runningCostVernis: cfgVal(offsetConfigRows, "running_cost_vernis", 22),
-    paperMarginRate: cfgVal(marginConfigRows, "paper_margin", 0.15),
+    runningCostVernis: cfgVal(offsetConfigRows, "running_cost_vernis", 20),
+    // ── Paper margin (XLSM-corrected: 10%) ──
+    paperMarginRate: cfgVal(marginConfigRows, "paper_margin", 0.10),
+    // ── Per-component discount rates (XLSM Détails PRIX remise system) ──
+    discountPlates: cfgVal(offsetConfigRows, "discount_plates", 0.00),
+    discountCalage: cfgVal(offsetConfigRows, "discount_calage", 0.10),
+    discountRoulage: cfgVal(offsetConfigRows, "discount_roulage", 0.10),
+    discountFichiers: cfgVal(offsetConfigRows, "discount_fichiers", 0.50),
+    discountFaconnage: cfgVal(offsetConfigRows, "discount_faconnage", 0.10),
+    discountPelliculage: cfgVal(offsetConfigRows, "discount_pelliculage", 0.00),
   };
 
-  const digitalMarginRate = cfgVal(marginConfigRows, "digital_final_margin", 0.05);
-  const offsetMarginRate = cfgVal(marginConfigRows, "offset_final_margin", 0.07);
+  const rawDigitalMarginRate = cfgVal(marginConfigRows, "digital_markup", 0.05);
+  const digitalMarginRate = rawDigitalMarginRate >= 1 ? rawDigitalMarginRate - 1 : rawDigitalMarginRate;
+  
+  const rawOffsetMarginRate = cfgVal(marginConfigRows, "offset_markup", 0.07);
+  const offsetMarginRate = rawOffsetMarginRate >= 1 ? rawOffsetMarginRate - 1 : rawOffsetMarginRate;
   const hayonSurcharge = 25;
 
   const hasCover = input.productType === "BROCHURE" && (input.pagesCover ?? 4) > 0;
@@ -216,6 +239,9 @@ export async function calculatePricing(
 
   const productWidthCm = format.widthCm;
   const productHeightCm = format.heightCm;
+  const openWidthCm = toNum(input.openFormat?.widthCm) || productWidthCm;
+  const openHeightCm = toNum(input.openFormat?.heightCm) || productHeightCm;
+
   const machineFormatOptions = machineFormats.map(m => ({
     widthCm: toNum(m.widthCm) || 65,
     heightCm: toNum(m.heightCm) || 92,
@@ -236,7 +262,7 @@ export async function calculatePricing(
 
   // Piqure (stapled) brochures have no spine; only Dos carré collé has a spine
   const spineThickness = (hasCover && bindingType?.name?.toLowerCase().includes("dos carre"))
-    ? estimateSpineThicknessCm(pagesInterior, input.paperInteriorGrammage ?? 90)
+    ? estimateSpineThicknessCm(pagesInterior, input.paperInteriorGrammage ?? 90, input.paperInteriorTypeName)
     : 0;
 
   const weightPerCopyGrams = calcWeightPerCopyGrams({
@@ -274,7 +300,16 @@ export async function calculatePricing(
   let bestDeliveryResult = { points: [] as DeliveryPointResult[], total: 0 };
   let bestCarrierName = "(aucun)";
 
-  if (deliveryPoints.length > 0) {
+  // Fromentières logic limit (Bloc-note Phase 2: 'Livraison à fromtières si couture...')
+  const isCouture = bindingType?.name?.toLowerCase().includes("couture") ?? false;
+  const fromentieresPoint: DeliveryPoint = {
+    copies: input.quantity,
+    zone: departments.find(d => d.code === "53")?.zone ?? 3,
+    hayon: false,
+    departmentCode: "53", // Mayenne (Fromentières)
+  };
+
+  if (deliveryPoints.length > 0 || isCouture) {
     for (const carrier of carriers) {
       const rates: DeliveryRateData[] = (carrier.deliveryRates ?? []).map(r => ({
         zone: r.zone,
@@ -295,16 +330,38 @@ export async function calculatePricing(
           price: toNum(r.price),
         }));
       } catch {
-        // TransportRateByDept migration not yet applied — falls back to zone-based
+        // TransportRateByDept migration not yet applied
       }
 
-      const result = calcDeliveryCost(deliveryPoints, weightPerCopyGrams, {
-        rates,
-        hayonSurcharge,
-        departmentRates: deptRates.length > 0 ? deptRates : undefined,
-      });
+      const deliveryConfigStr = { rates, hayonSurcharge, departmentRates: deptRates.length > 0 ? deptRates : undefined };
+      
+      let candidateTotal = 0;
+      let result = { points: [] as DeliveryPointResult[], total: 0 };
 
-      if (bestDeliveryResult.total === 0 || (result.total > 0 && result.total < bestDeliveryResult.total)) {
+      if (deliveryPoints.length > 0) {
+         result = calcDeliveryCost(deliveryPoints, weightPerCopyGrams, deliveryConfigStr);
+         candidateTotal = result.total;
+      }
+
+      if (isCouture) {
+         // Aller Fromentières
+         const allerResult = calcDeliveryCost([fromentieresPoint], weightPerCopyGrams, deliveryConfigStr);
+         const allerCost = allerResult.total;
+         const retourCost = allerCost; // Return shipping from binding to IMB
+
+         // Simulate Option A (Depart Fromentieres -> direct to Client)
+         // Note: Assuming our standard tables approximate 'Drop Ship from 53' cost.
+         const optionA = allerCost + candidateTotal; 
+         // Simulate Option B (Depart IMB -> retour from 53 to 14 + IMB to Client)
+         // Note: if the client is local to 14, this might be a required routing, but mathematically A is generally cheaper.
+         const optionB = allerCost + retourCost + candidateTotal;
+
+         candidateTotal = Math.min(optionA, optionB);
+         // Update the resulting total to include the binding transport overhead
+         result.total = candidateTotal;
+      }
+
+      if (bestDeliveryResult.total === 0 || (candidateTotal > 0 && candidateTotal < bestDeliveryResult.total)) {
         bestDeliveryResult = result;
         bestCarrierName = carrier.name;
       }
@@ -348,6 +405,7 @@ export async function calculatePricing(
       perUnitCost: toNum(t.perUnitCost),
       setupCost: toNum(t.setupCost),
     })),
+    bindingRules: bindingType?.rules || undefined,
     laminationMode: input.laminationMode,
     laminationTiers: (laminationFinish?.digitalPriceTiers ?? []).map(t => ({
       qtyMin: t.qtyMin,
@@ -359,6 +417,8 @@ export async function calculatePricing(
     clickDivisors: digitalClickDivisors,
     foldCount: input.foldCount,
     packagingCost,
+    numModels: (input as unknown as { numberOfModels?: number }).numberOfModels ?? 1,
+    numPoses: Math.max(1, (getClickDivisorForFormat(digitalClickDivisors, openWidthCm, openHeightCm).recto || 1)),
   };
 
   let digitalBreakdown: DigitalBreakdown;
@@ -412,7 +472,7 @@ export async function calculatePricing(
   // Autres: XLSM ×1.50 = pas de marge additionnelle; legacy = digitalMarginRate.
   const useDigitalMarkupModel = (digitalConfig.digitalMarkupMultiplier ?? 0) > 0;
   const isBrochureDigitalNoMarkup = input.productType === "BROCHURE" && hasCover;
-  const brochureDigitalMarginRate = 0.10;
+  const brochureDigitalMarginRate = cfgVal(digitalConfigRows, "brochure_digital_margin", 0.10);
   const digitalTotal = digitalError
     ? 0
     : isBrochureDigitalNoMarkup
@@ -421,8 +481,6 @@ export async function calculatePricing(
         ? digitalBreakdown.subtotal + deliveryResult.total
         : (digitalBreakdown.subtotal + deliveryResult.total) * (1 + digitalMarginRate);
 
-  const openWidthCm = toNum(input.openFormat?.widthCm) || productWidthCm;
-  const openHeightCm = toNum(input.openFormat?.heightCm) || productHeightCm;
   const offsetInput: OffsetInput = {
     productType: input.productType,
     quantity: input.quantity,
@@ -451,6 +509,7 @@ export async function calculatePricing(
       calageCost: toNum(t.calageCost),
       roulagePer1000: toNum(t.roulagePer1000),
     })),
+    bindingRules: (bindingType?.rules as unknown as OffsetBindingRules) || undefined,
     numCahiers: cahierStruct.numCahiers,
     cahiersCount: cahierStruct.cahiersCount,
     laminationMode: input.laminationMode,
@@ -462,8 +521,12 @@ export async function calculatePricing(
     foldCount: input.foldCount,
     foldCost,
     packagingCost,
-    cuttingCost: hasCover ? 0 : posesPerSheet * (digitalConfig.cuttingCostPerPose ?? 0.85) + 1 * (digitalConfig.cuttingCostPerModel ?? 1.25),
+    cuttingCost: 0, // In Offset, Excel doesn't charge per-pose cutting explicitly; it's absorbed in setup/margins.
     hasColorModeVarnish: !!(colorModeInterior as { hasVarnish?: boolean } | null)?.hasVarnish || !!(colorModeCover as { hasVarnish?: boolean } | null)?.hasVarnish,
+    // Phase 2: binding supplement context
+    spineThicknessCm: spineThickness,
+    encartedCahiers: input.encartedCahiers ?? 0,
+    hasMixedCahiers: input.hasMixedCahiers ?? false,
     config: offsetConfig,
   };
 
@@ -479,10 +542,12 @@ export async function calculatePricing(
       runningCost: 0,
       fileProcessing: 0,
       bindingCost: 0,
+      rainageCost: 0,
       laminationCost: 0,
       foldCost: 0,
       cuttingCost: 0,
       packagingCost: 0,
+      setupCostFlat: 0,
       subtotal: 0,
       deliveryCost: 0,
       margin: 0,
@@ -502,10 +567,12 @@ export async function calculatePricing(
         runningCost: 0,
         fileProcessing: 0,
         bindingCost: 0,
+        rainageCost: 0,
         laminationCost: 0,
         foldCost: 0,
         cuttingCost: 0,
         packagingCost: 0,
+        setupCostFlat: 0,
         subtotal: 0,
         deliveryCost: 0,
         margin: 0,
@@ -518,6 +585,20 @@ export async function calculatePricing(
   const offsetTotalRaw = (Number.isFinite(offsetSubtotal) ? offsetSubtotal : 0) + deliveryResult.total;
   const offsetTotal = offsetTotalRaw * (1 + offsetMarginRate);
 
+  // --- Finishing extras (§11-13) ---
+  const finishingExtras = calcFinishingExtras({
+    uvVarnish: input.uvVarnishMode && input.uvVarnishMode !== "Rien" ? {
+      mode: input.uvVarnishMode as "UV Brillant" | "UV Reserve",
+      machineWidthCm,
+      machineHeightCm,
+      quantity: input.quantity,
+    } : undefined,
+    encartMode: (input.encartMode && input.encartMode !== "Rien" ? input.encartMode : null) as "Aléatoire" | "Non aléatoire" | null,
+    recassageEnabled: input.recassageEnabled ?? false,
+    numFlaps: input.flapSizeCm > 0 ? (input.flapSizeCm > 5 ? 2 : 1) : 0,
+    quantity: input.quantity,
+  });
+
   const safeOffsetTotal = offsetError ? 0 : (Number.isFinite(offsetTotal) ? Math.round(offsetTotal * 100) / 100 : 0);
   const safeOffsetBreakdown = {
     ...offsetBreakdown,
@@ -528,10 +609,11 @@ export async function calculatePricing(
     runningCost: toNum(offsetBreakdown.runningCost),
     fileProcessing: toNum(offsetBreakdown.fileProcessing),
     bindingCost: toNum(offsetBreakdown.bindingCost),
+    rainageCost: toNum(offsetBreakdown.rainageCost),
     laminationCost: toNum(offsetBreakdown.laminationCost),
-    foldCost: toNum(offsetBreakdown.foldCost),
     cuttingCost: toNum((offsetBreakdown as { cuttingCost?: number }).cuttingCost),
     packagingCost: toNum(offsetBreakdown.packagingCost),
+    setupCostFlat: toNum((offsetBreakdown as { setupCostFlat?: number }).setupCostFlat),
     subtotal: toNum(offsetBreakdown.subtotal),
     deliveryCost: deliveryResult.total,
     margin: toNum(offsetBreakdown.margin),
@@ -734,6 +816,10 @@ export async function calculatePricing(
     `Traitements × Tarif = ${numTreatments} × ${offsetConfig.fileProcessingPerTreatment}`
   );
   addTo(varsOffset, "Reliure (off.)", Math.round(safeOffsetBreakdown.bindingCost * 100) / 100, "Calage forfait + (quantité/1000 × roulage/1000)");
+  if (safeOffsetBreakdown.bindingSurchargeDetail) {
+    addTo(varsOffset, "Suppléments reliure", safeOffsetBreakdown.bindingSurchargeDetail);
+  }
+  addTo(varsOffset, "Rainage (off.)", Math.round(safeOffsetBreakdown.rainageCost * 100) / 100, hasCover ? `Calage + quantité/1000 × tarif (${cahierStruct.numCahiers} cahiers)` : undefined);
   addTo(varsOffset, "Pelliculage (off.)", Math.round(safeOffsetBreakdown.laminationCost * 100) / 100, "Max(forfait + surface × qty × tarif/m², minimum facturable)");
   addTo(varsOffset, "Pliage (€)", Math.round(safeOffsetBreakdown.foldCost * 100) / 100, "Tarif selon type de pli (table FoldCost)");
   addTo(varsOffset, "Coupe (off.) (€)", Math.round(safeOffsetBreakdown.cuttingCost * 100) / 100, "Coupe dépliant/flyer");
@@ -741,9 +827,25 @@ export async function calculatePricing(
   addTo(varsOffset, "Taux de marque (%)", Math.round((safeOffsetBreakdown.tauxDeMarque ?? 0) * 10000) / 100, "1 − coût/vente");
   addTo(
     varsOffset,
+    "Coût fixe (forfait plat)",
+    Math.round((safeOffsetBreakdown.setupCostFlat ?? 0) * 100) / 100,
+    (safeOffsetBreakdown.setupCostFlat ?? 0) > 0 ? "50 € appliqué uniquement au tirage plat/dépliant/flyer" : undefined
+  );
+  
+  // --- TECH DATA FOR GROUP B: AMALGAMATION / BATCH EXPORT ---
+  if (safeOffsetBreakdown.techNbFeuillesInt !== undefined) {
+    addTo(varsOffset, "Tech: Nb Feuilles Intérieur", safeOffsetBreakdown.techNbFeuillesInt ?? 0, "[GROUP B] Base needed parent sheets before waste");
+    addTo(varsOffset, "Tech: Nb Feuilles Passe Int", safeOffsetBreakdown.techNbFeuillesPasseInt ?? 0, "[GROUP B] Waste/Spoilage sheets for inside");
+    addTo(varsOffset, "Tech: Nb Plaques Intérieur", safeOffsetBreakdown.techNbPlaquesInt ?? 0, "[GROUP B] Number of plates needed for inside pages");
+    addTo(varsOffset, "Tech: Nb 1000 de roule", safeOffsetBreakdown.techNb1000Roule ?? 0, "[GROUP B] Thousands of machine passes (Roller impressions)");
+    addTo(varsOffset, "Tech: Nb de cahiers", safeOffsetBreakdown.techNbCahiers ?? 0, "[GROUP B] Number of signatures (cahiers) to fold");
+  }
+
+  addTo(
+    varsOffset,
     "Sous-total offset (€)",
     Math.round(safeOffsetBreakdown.subtotal * 100) / 100,
-    "Papier + Plaques + Calage + Roulage + Fichiers + Reliure + Pelliculage + Pliage"
+    "Papier + Plaques + Calage + Roulage + Fichiers + Reliure + Pelliculage + Pliage + Fixe"
   );
   addTo(varsOffset, "Livraison (€)", Math.round(deliveryResult.total * 100) / 100, "Par point : zone × poids → tarif transport (+ hayon si demandé)");
   addTo(varsOffset, "Marge offset (%)", offsetMarginRate * 100, "Appliquée sur (Sous-total + Livraison)");
@@ -777,6 +879,7 @@ export async function calculatePricing(
     bestTotal,
     bestMethod,
     ecart,
+    finishingExtras,
     calculationVariablesInputs: varsInputs,
     calculationVariablesNumerique: varsNumerique,
     calculationVariablesOffset: varsOffset,

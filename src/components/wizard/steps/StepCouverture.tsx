@@ -22,12 +22,7 @@ import { FALLBACK_PAPER_TYPES } from "../fallbacks";
 import type { PaperType } from "../fallbacks";
 import type { StepProps } from "../WizardContainer";
 
-interface PaperGrammage {
-  id: string;
-  grammage: number;
-  pricePerKg: number;
-  active: boolean;
-}
+
 
 interface ColorMode {
   id: string;
@@ -258,13 +253,18 @@ export function StepCouverture({ data, updateData }: StepProps) {
     }
   }, [showLaminationFinish]);
 
-  // FIX 4.1: Reactive lamination clearing (VBA Feuil1.cls lines 203–235)
-  // When relevant grammage drops below 170g, lamination must be "Rien"
+  // FIX: Reactive lamination clearing (Group C limits)
+  // - When relevant grammage drops below 170g, lamination must be "Rien"
+  // - If product is DEPLIANT, lamination must be "Rien"
   const relevantGrammage = isBrochure
     ? data.paperCoverGrammage ?? null
     : data.paperInteriorGrammage ?? null;
+
   useEffect(() => {
-    if (relevantGrammage != null && relevantGrammage < 170 && data.laminationMode !== "Rien") {
+    const isThinPaper = relevantGrammage != null && relevantGrammage < 170;
+    const isDepliant = data.productType === "DEPLIANT";
+
+    if ((isThinPaper || isDepliant) && data.laminationMode !== "Rien") {
       updateData({
         laminationMode: "Rien",
         laminationFinishId: null,
@@ -272,7 +272,7 @@ export function StepCouverture({ data, updateData }: StepProps) {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [relevantGrammage]);
+  }, [relevantGrammage, data.productType]);
 
   const secondaryEnabled = data.secondaryFoldType === "Pli Croise";
   const pagesCover = data.pagesCover ?? 4;
@@ -345,9 +345,11 @@ export function StepCouverture({ data, updateData }: StepProps) {
               onValueChange={(v) => {
                 const mode = colorModes.find((c) => c.id === v);
                 const name = mode?.name ?? null;
-                showCoverFields
-                  ? updateData({ colorModeCoverId: v, colorModeCoverName: name })
-                  : updateData({ colorModeInteriorId: v, colorModeInteriorName: name });
+                if (showCoverFields) {
+                  updateData({ colorModeCoverId: v, colorModeCoverName: name });
+                } else {
+                  updateData({ colorModeInteriorId: v, colorModeInteriorName: name });
+                }
               }}
               onOpenChange={(open) => open && blurActiveElement()}
             >
@@ -490,10 +492,11 @@ export function StepCouverture({ data, updateData }: StepProps) {
 
       <Separator />
 
-      <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Pelliculage</h3>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+      {data.productType !== "DEPLIANT" && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold text-foreground">Pelliculage</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
             <Label>Mode de pelliculage</Label>
             <Select
               value={data.laminationMode}
@@ -549,6 +552,7 @@ export function StepCouverture({ data, updateData }: StepProps) {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

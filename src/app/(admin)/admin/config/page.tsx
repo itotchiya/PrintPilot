@@ -55,7 +55,7 @@ const configCategories = [
     description: "Types de pliage et coûts",
     href: "/admin/config/folds",
     icon: Scissors,
-    count: "3 types",
+    count: "4 types",
   },
   {
     title: "Pelliculage",
@@ -83,14 +83,14 @@ const configCategories = [
     description: "Plaques, calage, roulage",
     href: "/admin/config/offset",
     icon: Settings,
-    count: "16 paramètres",
+    count: "70+ paramètres",
   },
   {
     title: "Coûts Numérique",
     description: "Clics, mise en route",
     href: "/admin/config/digital",
     icon: Cpu,
-    count: "10 paramètres",
+    count: "12 paramètres",
   },
   {
     title: "Marges",

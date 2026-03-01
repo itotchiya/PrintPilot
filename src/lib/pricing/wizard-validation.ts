@@ -4,6 +4,7 @@ import {
   canHaveInterior,
   canHaveFolds,
   isPagesValid,
+  validateFoldGrammage,
 } from "./product-rules";
 
 export interface StepValidationResult {
@@ -35,10 +36,12 @@ export function validateQuoteRules(data: QuoteInput): string[] {
   if (pt !== "BROCHURE" && pt !== null && data.laminationMode !== "Rien") {
     const g = data.paperInteriorGrammage ?? 0;
     if (g > 0 && g < 170) errors.push("Pelliculage dépliant/flyer/carte : grammage ≥ 170 g requis");
+    // Group C: If product is a Folded leaflet (Dépliant), clear/reject lamination
+    if (pt === "DEPLIANT") errors.push("Le pelliculage est interdit pour les dépliants");
   }
 
-  // 5. Dos carré requires ≥ 40 total pages
-  if (isDosCarre && totalPages < 40) errors.push("Dos carré collé : au moins 40 pages total (intérieur + couverture)");
+  // 5. Dos carré requires ≥ 32 interior pages (A5) (Resolved anomaly: DB supports >= 32)
+  if (isDosCarre && pagesInterior < 32) errors.push("Dos carré collé : au moins 32 pages intérieures");
 
   // 6. Dos carré requires cover (pagesCover 2 or 4)
   if (pt === "BROCHURE" && isDosCarre && pagesCover === 0)
@@ -57,20 +60,29 @@ export function validateQuoteRules(data: QuoteInput): string[] {
   // 10. Total pages multiple of 4
   if (totalPages > 0 && totalPages % 4 !== 0) errors.push("Total des pages (intérieur + couverture) doit être multiple de 4");
 
-  // 11. Accordion fold: 1 fold not allowed
-  const foldName = (data.foldTypeName ?? "").toLowerCase();
-  if ((foldName.includes("accordéon") || foldName.includes("accordion")) && data.foldCount === 1)
-    errors.push("Pli accordéon : 1 pli non autorisé");
+  // 11. Folder Validation based on physical constraints (Group C)
+  if (pt === "DEPLIANT" || pt === "FLYER" && data.foldCount > 0) {
+    const internalGrammage = data.paperInteriorGrammage ?? 0;
+    const coverGrammage = data.paperCoverGrammage ?? internalGrammage;
+    const maxCheckedGrammage = Math.max(internalGrammage, coverGrammage);
+    
+    // Check primary fold
+    const primaryRes = validateFoldGrammage(data.foldTypeName ?? "", data.foldCount, maxCheckedGrammage);
+    if (!primaryRes.valid) {
+      if (primaryRes.reason) errors.push(primaryRes.reason);
+    } else if (primaryRes.maxGrammage !== null && maxCheckedGrammage > primaryRes.maxGrammage) {
+      errors.push(`${data.foldTypeName} : grammage max ${primaryRes.maxGrammage} g`);
+    }
 
-  // 12. Cross-fold (Pli croisé): max 2 folds
-  if (data.secondaryFoldType === "Pli Croise" && data.secondaryFoldCount > 2)
-    errors.push("Pli croisé : maximum 2 plis");
-
-  // 13. Cross-fold: grammage max 150g
-  if (data.secondaryFoldType === "Pli Croise" && (data.secondaryFoldCount > 0)) {
-    const gi = data.paperInteriorGrammage ?? 0;
-    const gc = data.paperCoverGrammage ?? 0;
-    if (gi > 150 || gc > 150) errors.push("Pli croisé : grammage max 150 g");
+    // Check secondary fold if present
+    if (data.secondaryFoldType && data.secondaryFoldCount > 0) {
+      const secondaryRes = validateFoldGrammage(data.secondaryFoldType, data.secondaryFoldCount, maxCheckedGrammage);
+      if (!secondaryRes.valid) {
+        if (secondaryRes.reason) errors.push(secondaryRes.reason);
+      } else if (secondaryRes.maxGrammage !== null && maxCheckedGrammage > secondaryRes.maxGrammage) {
+        errors.push(`${data.secondaryFoldType} : grammage max ${secondaryRes.maxGrammage} g`);
+      }
+    }
   }
 
   // 15. Open format max 32×48 cm for depliants

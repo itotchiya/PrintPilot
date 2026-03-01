@@ -58,6 +58,7 @@ function hasDigitalLaminationTiers(
 /**
  * Validates whether the selected options allow digital and/or offset pricing.
  * Returns availability flags, reasons when unavailable, and suggestions.
+ * Implements XLSM PreCheck_Config (CLAUDE.md §21) + Feuil14 rules (§20).
  */
 export function validateMethodAvailability(
   input: QuoteInput,
@@ -73,6 +74,75 @@ export function validateMethodAvailability(
   const hasCover =
     input.productType === "BROCHURE" && (input.pagesCover ?? 4) > 0;
   const hasLamination = input.laminationMode && input.laminationMode !== "Rien";
+
+  // ─── XLSM PreCheck_Config (CLAUDE.md §21) ─────────────────────────────
+  const pagesInt = input.pagesInterior ?? 0;
+  const pagesCouv = input.pagesCover ?? 0;
+  const flapSize = input.flapSizeCm ?? 0;
+
+  if (input.productType === "BROCHURE" && flapSize > 0) {
+    // Digital printing cannot handle cover flaps (from Group 1 reverse macro rules)
+    digitalReasons.push("L'impression numérique ne prend pas en charge les couvertures avec rabats.");
+    suggestionsForDigital.push("Retirer le rabat pour activer le numérique.");
+  }
+
+  if (input.productType === "BROCHURE" && pagesInt > 0) {
+    // §21.1-3: Pages intérieur must be ≥ 4 and multiple of 4
+    if (pagesInt < 4) {
+      const msg = "Pages intérieur doit être ≥ 4.";
+      digitalReasons.push(msg);
+      offsetReasons.push(msg);
+    } else if (pagesInt % 4 !== 0) {
+      const msg = "Pages intérieur doit être un multiple de 4.";
+      digitalReasons.push(msg);
+      offsetReasons.push(msg);
+    }
+    // §21.4-5: Pages couverture must be 0, 2, or 4
+    if (pagesCouv !== 0 && pagesCouv !== 2 && pagesCouv !== 4) {
+      const msg = "Pages couverture doit être 0, 2 ou 4.";
+      digitalReasons.push(msg);
+      offsetReasons.push(msg);
+    }
+  }
+
+  // ─── DCC-specific pre-checks (CLAUDE.md §20.4, §20.5, §21.7) ──────────
+  const bindingName = (bindingType?.name ?? input.bindingTypeName ?? "").toLowerCase();
+  const isDCC = bindingName.includes("dos carre") || bindingName.includes("dos carré");
+
+  if (isDCC && input.productType === "BROCHURE") {
+    // §21.7 / §20.4: DCC requires interior pages ≥ 32 (Resolved anomaly: DB supports >= 32)
+    if (pagesInt < 32) {
+      const msg = `Dos carré collé nécessite minimum 32 pages intérieures (actuellement ${pagesInt}).`;
+      digitalReasons.push(msg);
+      offsetReasons.push(msg);
+      suggestionsForDigital.push("Augmenter le nombre de pages ou choisir Piqûre.");
+      suggestionsForOffset.push("Augmenter le nombre de pages ou choisir Piqûre.");
+    }
+    // §20.5: DCC requires cover (pagesCover > 0)
+    if (pagesCouv === 0) {
+      const msg = "Dos carré collé nécessite une couverture (pages couverture > 0).";
+      digitalReasons.push(msg);
+      offsetReasons.push(msg);
+    }
+    // §20.5: DCC requires cover grammage ≥ 170g
+    const coverGrammage = input.paperCoverGrammage ?? 0;
+    if (coverGrammage > 0 && coverGrammage < 170) {
+      const msg = `Dos carré collé nécessite un grammage couverture ≥ 170g (actuellement ${coverGrammage}g).`;
+      digitalReasons.push(msg);
+      offsetReasons.push(msg);
+      suggestionsForDigital.push("Choisir un grammage couverture ≥ 170g.");
+      suggestionsForOffset.push("Choisir un grammage couverture ≥ 170g.");
+    }
+  }
+
+  // ─── §20.1: Pelliculage RectoVerso + DCC mutual exclusion ──────────────
+  if (isDCC && input.laminationMode === "Pelliculage Recto Verso") {
+    const msg = "Pelliculage Recto Verso est incompatible avec Dos carré collé.";
+    digitalReasons.push(msg);
+    offsetReasons.push(msg);
+    suggestionsForDigital.push("Choisir « Pelliculage Recto » ou « Rien ».");
+    suggestionsForOffset.push("Choisir « Pelliculage Recto » ou « Rien ».");
+  }
 
   // ─── Binding (BROCHURE only) ─────────────────────────────────────────────
   if (hasCover && bindingType) {

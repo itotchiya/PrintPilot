@@ -84,6 +84,87 @@ export function calcOpenFormat(
   return { widthCm, heightCm };
 }
 
+// ── Fold grammage limits (CLAUDE.md §3.4, from Réglages_Presses.csv rows 65-69) ──
+// Maximum grammage (g/m²) per fold type × pli count. Null = forbidden combination.
+const FOLD_GRAMMAGE_LIMITS: Record<string, (number | null)[]> = {
+  // Index: [0]=unused, [1]=1pli, [2]=2plis, [3]=3plis, [4]=4plis, [5]=5plis, [6]=6plis
+  "croise":     [null, 270, 250, 150, 115, 115, 115],
+  "roule":      [null, 270, 250, 200, 200, 200, 135],
+  "economique": [null, 270, 270, 200, 170, null, null],
+  "accordeon":  [null, null, 270, 250, 200, 170, 170], // 1 pli accordéon = FORBIDDEN
+};
+
+export interface FoldGrammageResult {
+  valid: boolean;
+  maxGrammage: number | null;
+  reason?: string;
+}
+
+/**
+ * Validates whether a fold type + count is allowed for the given grammage.
+ * Returns maxGrammage for the combination and whether it's valid.
+ * XLSM rules: "1 pli accordéon" is explicitly forbidden.
+ */
+export function validateFoldGrammage(
+  foldTypeName: string | null,
+  foldCount: number,
+  grammage: number
+): FoldGrammageResult {
+  if (!foldTypeName || foldCount <= 0) return { valid: true, maxGrammage: null };
+
+  const key = foldTypeName.toLowerCase()
+    .replace(/[éè]/g, "e")
+    .replace(/[ô]/g, "o")
+    .replace(/pli\s*/i, "")
+    .trim();
+
+  // Find matching fold type
+  let limits: (number | null)[] | undefined;
+  for (const [k, v] of Object.entries(FOLD_GRAMMAGE_LIMITS)) {
+    if (key.includes(k)) { limits = v; break; }
+  }
+  if (!limits) return { valid: true, maxGrammage: null }; // Unknown fold type: no limit
+
+  if (foldCount > limits.length - 1) {
+    return { valid: false, maxGrammage: null, reason: `${foldTypeName} ne supporte pas ${foldCount} plis` };
+  }
+
+  const maxGrammage = limits[foldCount];
+  if (maxGrammage === null) {
+    // Forbidden combination (e.g. 1 pli accordéon, or 5+ plis économique)
+    return {
+      valid: false,
+      maxGrammage: null,
+      reason: key.includes("accordeon") && foldCount === 1
+        ? "1 pli accordéon est interdit"
+        : `${foldTypeName} ${foldCount} pli(s) n'est pas supporté`,
+    };
+  }
+
+  if (grammage > maxGrammage) {
+    return {
+      valid: false,
+      maxGrammage,
+      reason: `Grammage ${grammage}g dépasse le max ${maxGrammage}g pour ${foldTypeName} ${foldCount} pli(s)`,
+    };
+  }
+
+  return { valid: true, maxGrammage };
+}
+
+// ── Pli croisé specific constraints (§3.4) ──
+// Max 2 plis, max grammage 150g
+export function validateCrossFold(foldCount: number, grammage: number): FoldGrammageResult {
+  if (foldCount > 2) {
+    return { valid: false, maxGrammage: 150, reason: "Pli croisé : maximum 2 plis" };
+  }
+  const maxG = foldCount === 1 ? 270 : foldCount === 2 ? 250 : 150;
+  if (grammage > maxG) {
+    return { valid: false, maxGrammage: maxG, reason: `Pli croisé ${foldCount} pli(s) : max ${maxG}g` };
+  }
+  return { valid: true, maxGrammage: maxG };
+}
+
 // Steps visible for each product type (7 steps: 4=Elements 1, 5=Elements 2 only for brochure)
 export function getVisibleSteps(p: ProductType | null): number[] {
   if (p === "BROCHURE") return [1, 2, 3, 4, 5, 6, 7];

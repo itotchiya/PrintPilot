@@ -1,0 +1,133 @@
+﻿===== DETAILS PRIX (offset brochure calculation) =====
+  R1: C1=Nombre de feuilles int├®rieur | C2=Nombre de feuilles couverture | C3=Cahiers | C4=Nombre | C5=Bascule
+  R2: C1=1800 | C2=200 | C3=32 Pages | C4=0
+  R3: C3=24 Pages | C4=0
+  R4: C1=Feuilles de passes int├®rieur | C2=Feuilles de passes couverture | C3=16 Pages | C4=2 | C5=NON
+  R5: C1=1500 | C2=300 | C3=12 Pages | C4=0 | C5=NON
+  R6: C3=8 Pages | C4=0 | C5=NON
+  R7: C1=Papier | C3=4 Pages | C4=1 | C5=NON
+  R8: C1=Poids papier int├®rieur en KG | C2=Poids papier couverture en KG | C3=Nombre de cahiers | C4=3 | C5=2├ù16 + 1├ù4
+  R9: C1=256.608 | C2=86.4
+  R10: C1=Prix papier int├®rieur  | C2=Prix papier couverture  | C3=Nombre de pose couverture | C4=4
+  R11: C1=256.608 | C2=86.4 | C3=PRIX ET FORMAT PAPIERS | C8=Prix co├╗tants (mati├¿re)
+  R12: C1=Prix papier marg├® | C3=Prix papier int├®rieur / kg | C4=Prix papier couverture / kg | C5=Format papier choisi int├®rieur | C6=Format papier choisi couverture | C8=Type | C9=Prix | C10=Marg├®
+  R13: C1=377.3088 | C3=1 | C4=1 | C5=64x90 | C6=64x90 | C8=Papier int├®rieur | C9=256.608 | C10=282.2688 | C11=0.1
+  R14: C2=Prix PROCOP | C3=Z:\0 - Achats IMB\Tarif palette Cube JANVIER 2026.pdf | C8=Papier couverture | C9=86.4 | C10=95.04 | C11=0.1
+  R15: C1=Op├®rations des machines | C8=Plaques int├®rieur | C9=84 | C10=198
+  R16: C1=D├®signation | C2=Nombre | C3=Prix | C4=Traitement fichier | C6=Taux de marque | C8=Plaques couverture | C9=14 | C10=44
+  R17: C1=Plaques pour l'int├®rieur | C2=24 | C3=264 | C4=12.5 | C6=0.6199010428019606 | C8=Encre
+  R18: C1=Plaques pour couverture | C2=4 | C3=44 | C4=12.5 | C6=Taux de marge
+  R19: C1=Calages | C2=28 | C3=168 | C6=1.6308938266278354 | C8=Pelliculage
+  R20: C1=Milliers de passages machines | C2=7.6 | C3=114 | C6=Marge ajout├® manuellement en Ôé¼ | C8=Colle
+  R21: C2=Total | C3=615 | C8=Emballage | C9=4
+  R23: C1=Fa├ºonnage | C8=Livraison | C9=0
+  R24: C1=D├®signation | C3=Prix | C4=Dont suppl├®ment  | C5=D├®tails | C10=Marge sur Mat.premi├¿re | C11=Fa├ºonnage | C12=Prix impression (roule / calage) | C13=Livraisons | C14=Marge ajout├® manuellement | C15=Rappel Total
+  R25: C1=Piq├╗re | C3=118.4 | C4=0 | C8=Total co├╗tant | C9=445.00800000000004 | C10=178.30079999999998 | C11=281.15999999999997 | C12=266.29999999999995 | C13=0 | C14=0 | C15=725.7607999999999
+  R26: C1=Piq├╗re Graphisoft | C3=118.4 | C4=0
+  R27: C1=Piq├╗re Normandie Fa├ºonnage | C3=133 | C4=0
+  R28: C1=D├®signation | C2=nombre de m┬▓ | C3=Prix
+  R29: C1=Pelliculage | C2=239.2 | C3=174.6
+  R30: C1=D├®signation | C2=Nombre de carton / palette | C3=Prix
+  R31: C1=Cartons | C2=0 | C3=0
+  R32: C1=Palettes | C2=1 | C3=10
+  R33: C1=D├®signation | C2=Nb de paquets | C3=Prix
+  R34: C1=Mise sous film | C2=0 | C3=0
+  R35: C1=Mise sous ├®lastiques | C2=0 | C3=0
+  R38: C1=Remise sur le devis
+  R39: C1=Fa├ºonnage
+  R40: C2=Prix Logiciel | C4=Nouveau prix | C5=Remise par poste | C6=Nouveau prix pour le groupe | C7=Remise consentie
+  R41: C1=Piq├╗re | C2=118.4 | C3=0.1 | C4=106.56 | C5=-11.840000000000003 | C6=291.15999999999997 | C7=-11.840000000000032
+  R42: C1=Pelliculage | C2=174.6 | C4=174.6 | C5=0
+  R43: C1=Palettes | C2=10 | C4=10 | C5=0
+  R44: C1=Mise sous film | C2=0 | C4=0 | C5=0
+  R45: C1=Mise sous ├®lastiques | C2=0 | C4=0 | C5=0
+  R46: C1=Cartons | C2=0 | C3=0.5 | C4=0 | C5=0
+  R47: C1=Op├®rations des machines
+  R48: C2=Prix Logiciel | C4=Nouveau prix par poste | C5=Remise par poste | C6=Nouveau prix pour le groupe | C7=Remise consentie | C8=ÔåÆ PRIX DE CALAGE / LAVAGE ÔÇô KOMORI 540 (TIRE MAXI) | C9=Valeur | C10=Unit├® | C12=Nom | C13=Formule ├á mettre (dans cellules cach├®es ou nomm├®es) | C14=OPTIMISATION PAPIER INTERIEUR | C17=POSES / FEUILLES | C18=OPTIMISATION PAPIER COUVERTURE
+  R49: C1=Plaques pour l'int├®rieur | C2=264 | C3=0.25 | C4=198 | C5=-66 | C6=508.29999999999995 | C7=-106.70000000000005 | C8=Prix de revient horaire | C9=290 | C10=Ôé¼/h | C12=LargeurFini | C13=21 | C16=65x92 | C17=4
+  R50: C1=Plaques pour couverture | C2=44 | C4=44 | C5=0 | C8=Marge | C12=HauteurFini | C13=29.7 | C16=64x90 | C17=4
+  R51: C1=Calages | C2=168 | C3=0.1 | C4=151.2 | C5=-16.80000000000001 | C8=Calage (par plaque) | C9=6 | C10=Ôé¼ | C16=72x102 | C17=4
+  R52: C1=Milliers de passages machines | C2=114 | C3=0.1 | C4=102.6 | C5=-11.400000000000006 | C8=Calage vernis | C9=6 | C10=Ôé¼ | C12=Nom | C13=Formule | C17=NB FEUILLES
+  R53: C1=Traitement fichiers | C2=25 | C3=0.5 | C4=12.5 | C5=-12.5 | C8=Recherche de teinte | C9=10 | C10=Ôé¼ | C12=LargeurFeuille | C13=92 | C16=65x92 | C17=200
+  R54: C1=Marge papier | C8=Lavage dÔÇÖun groupe | C9=0 | C10=Ôé¼ | C12=HauteurFeuille | C13=65 | C16=64x90 | C17=200
+  R55: C1=Poids papier int├®rieur en KG | C2=256.608 | C3=Poids papier couverture en KG | C4=86.4 | C8=Prix coutant d'une plaque | C9=3.5 | C10=Ôé¼ | C13=65x92 | C14=64x90 | C15=72x102 | C16=72x102 | C17=200
+  R56: C1=Prix coutant int├®rieur | C2=256.608 | C3=Prix co├╗tant couv | C4=86.4 | C8=Prix de vente d'une plaque | C9=11 | C10=Ôé¼ | C12=Poses | C13=8 | C14=8 | C15=8
+  R57: C2=Prix Logiciel | C4=Nouveau prix | C5=Remise par poste | C6=Nouveau prix pour le groupe | C7=Remise consentie | C8=ÔåÆ CO├øTS DE TIRAGE (Ôé¼/1000 TOURS) ÔÇô KOMORI 540 | C9=Valeur | C10=Unit├® | C12=Pages imposables par feuille | C13=16 | C14=16 | C15=16
+  R58: C1=Prix int├®rieur marg├® | C2=25.660800000000002 | C4=25.660800000000002 | C5=0 | C6=34.3008 | C7=0 | C8=Tirage Ôëñ 1 000 | C9=15 | C10=Ôé¼/1000 tours | C13=65x92 | C14=64x90 | C15=72x102
+  R59: C1=Prix couverture marg├® | C2=8.64 | C4=8.64 | C5=0 | C8=Tirage Ôëñ 3 000 | C9=15 | C10=Ôé¼/1000 tours | C12=32 | C13=0 | C14=0 | C15=0
+  R60: C8=Tirage Ôëñ 5 000 | C9=15 | C10=Ôé¼/1000 tours | C12=24 | C13=0 | C14=0 | C15=0
+  R61: C1=R├®duction globale  | C8=Tirage Ôëñ 10 000 | C9=15 | C10=Ôé¼/1000 tours | C12=16 | C13=2 | C14=2 | C15=2
+  R62: C1=-118.54000000000008 | C8=Tirage Ôëñ 12 000 | C9=15 | C10=Ôé¼/1000 tours | C12=12 | C13=0 | C14=0 | C15=0
+  R63: C8=Tirage vernis | C9=20 | C10=Ôé¼/1000 tours | C12=8 | C13=0 | C14=0 | C15=0
+  R64: C12=4 | C13=1 | C14=1 | C15=1
+  R68: C12=Nombre de feuille int├®rieur | C13=1800 | C14=1800 | C15=1800
+
+===== TABLEAU OFFSET (main sheet) =====
+  R1: C1=BROCHURES OFFSET | C4=Pour activer les boutons, il faut que les "macros" soient autoris├®es. Certaines ... | C6=Outil de comparaison avec le prix en impression num├®rique | C12=CoucheSatinInterieur | C13=CoucheSatinCouv
+  R2: C1=Quantit├®  | C2=Format fini (ferm├®) en cm | C3=Format ouvert | C4=Epaisseur du dos en cm | C6=Prix num├®rique | C7=1761.7032 | C13=1
+  R3: C1=800 | C2=21x29,7 | C3=42x29,7 | C4=0 | C6=Prix offset | C7=1259.1426159999999
+  R4: C1=Pages int├®rieur | C2=Pages couverture | C3=Rabats  | C4=Taille (cm) | C6=Ecart avec num├®rique | C7=-502.56058400000006
+  R5: C1=36 | C2=4 | C3=0 | C4=0
+  R6: C1=Grammage int├®rieur et type | C2=Grammage couverture | C3=Prix papier int├®rieur au kg
+Hors fichier IMB (choisir "Autre" en A7) | C4=Prix papier couverture au kg
+Hors fichier IMB (choisir "Autre" en B7) | C13=True
+  R7: C1=Couch├® Satin | C2=Couch├® Satin
+  R8: C1=135 | C2=300
+  R10: C1=Type d'impression int├®rieur | C2= Type d'impression Couverture | C3=Pelliculage | C4=Type de pelliculage
+  R11: C1=Quadrichromie | C2=Quadrichromie | C3=Pelliculage RectoVerso | C4=Soft Touch
+  R12: C1=Fa├ºonnage
+  R13: C1=Piq├╗re
+  R14: C1=Conditionnement
+  R15: C1=Mise en cartons
+  R17: C1=Mise sous film  | C2=Mise sous ├®lastiques par paquet
+  R19: C1=Livraisons
+  R20: C1=Points de livraisons | C2=Nombre d'exemplaires au point | C3=Poids par point (kg) | C4=D├®partement de livraison | C5=Camion avec hayon | C6=Prix du point de livraison | C7=Transporteur | C8=Tarif en 24 ├á 72h si urgent, nous consulter
+  R21: C1=Point 1 | C5=Non | C6=0
+  R22: C1=Point 2 | C5=Non | C6=0
+  R23: C1=Point 3 | C5=Non | C6=0
+  R24: C1=Point 4 | C5=Non | C6=0
+  R25: C1=Point 5 | C5=Non | C6=0
+  R26: C2=ÔÜá Quantit├® incompl├¿te : 0 / 800 | C5=Total livraisons | C6=0
+  R27: C1=Poids de l'exemplaire en gramme | C2=Poids de la commande (KG) | C5=Co├╗t livraison (manuel)
+  R28: C1=193.4497901525233 | C2=154.75983212201862
+  R30: C1=TARIF en Ôé¼ H.T avec livraison.
+Attention qu'aucune cellule ne soit rouge vif
+  R31: C1=1259.1426159999999
+  R33: C1=D├®pliants / Flyers / Carte de visites / Posters OFFSET | C4=Pour activer les boutons, il faut que les "macros" soient autoris├®es. Certaines ... | C6=Outil de comparaison avec le prix en impression num├®rique | C13=#VALUE!
+  R34: C1=Quantit├®  | C2=Format fini (ferm├®) en cm | C3=Format ouvert | C4=Nombre de volets | C6=Prix num├®rique | C7=0
+
+===== DONNEES NUM =====
+  R1: C2=TABLEAU DETAIL TARIF | C4=Prix  | C5=Prix co├╗tant | C8=Quantit├®  | C9=Format fini 
+  R2: C2=Co├╗t du clic int├®rieur | C4=432 | C5=674.808 | C8=800 | C9=21x29,7
+  R3: C2=Co├╗t du clic couverture | C4=48 | C8=Pages int├®rieur | C9=Pages couverture
+  R4: C2=Co├╗t papier couverture | C4=38.568 | C8=36 | C9=4
+  R5: C2=Co├╗t papier int├®rieur | C4=156.24 | C8=Grammage et type de papier int├®rieur | C9=Grammage et type de papier couverture
+  R6: C2=Temps machine (en H) soit en euros | C4=5.333333333333333 | C8=Couch├® Satin | C9=Couch├® Satin
+  R7: C8=135 | C9=300
+  R8: C4=266.66666666666663 | C8=Couleurs int├®rieur | C9=Couleurs couverture
+  R9: C2=Fa├ºonnage | C3=Piq├╗re (rainage inclus sur +200gr) | C4=217 | C5=Taux de marge | C8=Quadrichromie | C9=Quadrichromie
+  R10: C3=Hotmelt | C4=0 | C5=1.4857379679355707 | C8=9 / Fa├ºonnage | C9=Pelliculage
+  R11: C3=PUR | C4=0 | C5=Marge ajout├® manuellement en Ôé¼ | C8=Piq├╗re | C9=Pelliculage RectoVerso
+  R12: C2=Conditionnement - Coupe | C3=Nb paquets | C4=0 | C8=Prix papier int├®rieur / kg | C9=Prix papier couverture / kg
+  R13: C3=Prix | C4=0 | C8=1 | C9=1
+  R14: C2=Finitions (pelliculage couverture) | C4=204.7 | C7=Nombre de pose int├®rieur | C8=Clic int├®rieur | C9=Clic couverture
+  R15: C1=Livraison et r├®partition | C2=Quantit├® par points | C3=Num├®ro d├®partement | C4=Prix livraison par points | C5=Poids / points en KG | C7=2 | C8=14400 | C9=1600
+  R16: C3=0 | C5=0 | C8=Nombre de feuilles int├®rieur 33x48,7 | C9=Nombre de feuilles couverture 33x48,7 | C10=Nombre de pose couverture
+  R17: C3=0 | C5=0 | C8=7200 | C9=800 | C10=1
+  R18: C3=0 | C5=0 | C8=Poids papier int├®rieur en KG | C9=Poids papier couverture en KG
+  R19: C1=Frais de dossiers | C4=45 | C8=156.24 | C9=38.568
+  R20: C2=Prix Papier et Clic x 1,50 / Marge net en E20 | C4=944.0292 | C5=269.22119999999995
+  R21: C2=Prix Hors TAXE hors livraisons | C4=1677.3958666666667
+  R22: C2=Prix de vente final | C4=1761.2656600000003
+  R23: C8=Donn├®es retir├®s
+  R25: C3=Prix clic  | C4=Amortissement machine | C5=Prix r├®el du clic | C8=Amortissement machine | C9=Largeur format | C10=Hauteur format
+  R26: C2=Quadri | C3=0.03 | C5=0.03 | C8=0.011 | C9=21 | C10=29.7
+  R27: C2=Noir | C3=0.0065 | C5=0.0065 | C8=0.0018
+  R32: C2=TABLEAU DETAIL TARIF | C4=Prix  | C5=Prix co├╗tant | C8=Prix papier / kg
+  R33: C2=Co├╗t du clic  | C4=75 | C5=129.25 | C8=1
+  R34: C2=Co├╗t papier int├®rieur | C4=54.25 | C8=Nombre de clic | C9=Nombre de feuille
+  R35: C2=Temps machine (en H) soit en euros | C4=0.8333333333333334 | C5=Calage plieuse | C8=2500 | C9=2500
+  R36: C4=50 | C5=20 | C8=Poid papier (en kg) | C9=Nombre de pose
+  R37: C2=Plieuse | C4=0 | C5=Taux de marge | C8=54.25 | C9=2
+  R38: C1=Mod├¿les | C2=Finitions (pelliculage) | C4=0 | C5=1.0881044487427465 | C8=Quantit├® | C9=Format fini (max 32x48) | C10=Mod├¿les (Quantit├® / Mod├¿les)
+  R39: C1=0 | C2=Conditionnement | C3=Nb paquets | C4=0 | C5=Marge ajout├® manuellement en Ôé¼ | C8=5000 | C9=21x29,7 | C10=0

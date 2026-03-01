@@ -164,6 +164,7 @@ model PaperGrammage {
   grammage              Int
   pricePerKg            Decimal
   weightPer1000Sheets   Decimal?
+  thicknessPer100       Decimal?  // Spine thickness per 100 sheets (in mm)
   availableForDosCarre  Boolean   @default(true)
   active                Boolean   @default(true)
   createdAt             DateTime  @default(now())
@@ -217,6 +218,10 @@ model BindingType {
   minPages          Int
   maxPages          Int?
   active            Boolean                   @default(true)
+  
+  // JSON rules for specific binding penalties (e.g. heavy paper, extreme spines)
+  rules             Json?
+
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   digitalPriceTiers BindingPriceTierDigital[]
@@ -436,10 +441,12 @@ model DigitalConfig {
   @@index([fournisseurId])
 }
 
+// ─── MARGIN CONFIG ─────────────────────────────────────────────────────────────
+
 model MarginConfig {
   id             String    @id @default(cuid())
   fournisseurId  String?
-  key            String
+  key            String    // Expected keys: "digital_markup" (usually 1.05), "offset_markup" (usually 1.07), "paper_margin"
   value          Decimal
   unit           String?
   description    String?
@@ -460,6 +467,12 @@ model MachineFormat {
   heightCm       Decimal
   isDefault      Boolean   @default(false)
   active         Boolean   @default(true)
+  
+  // JSON configurations for machine-specific pricing/waste
+  defaultWasteRatio Decimal?  // e.g., 0.02
+  wasteTiers        Json?     // [{ "max": 3000, "ratio": 0.05 }, ...]
+  runningCostTiers  Json?     // [{ "max": 1000, "cost": 25 }, { "max": 3000, "cost": 15 }]
+
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -478,4 +491,20 @@ model FormatClickDivisor {
 
   @@unique([fournisseurId, formatName])
   @@index([fournisseurId])
+}
+
+// ─── DIGITAL CUTTING CONFIG ───────────────────────────────────────────────────
+
+model DigitalCutTier {
+  id             String    @id @default(cuid())
+  fournisseurId  String?
+  productType    ProductType // BROCHURE vs FLYER
+  qtyMax         Int
+  perUnitCost    Decimal
+  setupCost      Decimal   @default(10.0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([fournisseurId])
+  @@index([fournisseurId, productType])
 }

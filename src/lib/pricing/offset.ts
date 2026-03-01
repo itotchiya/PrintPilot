@@ -19,15 +19,25 @@ export interface OffsetConfig {
   gacheTiragePctTier8k: number;
   gacheTiragePctTier10k: number;
   gacheVernis: number;                 // 2 sheets per plate when vernis/lamination
-  runningCostTier1: number;            // 25.00 EUR/1000 (≤1000)
-  runningCostTier2: number;            // 16.00 EUR/1000 (≤3000)
+  runningCostTier1: number;            // 15.00 EUR/1000 (≤1000, XLSM-corrected)
+  runningCostTier2: number;            // 15.00 EUR/1000 (≤3000, XLSM-corrected)
   runningCostTier3: number;            // 15.00 EUR/1000 (≤5000)
   runningCostTier4: number;            // 15.00 EUR/1000 (≤10000)
   runningCostTier5: number;            // 15.00 EUR/1000 (≤12000)
   runningCostTier6: number;            // 15.00 EUR/1000 (>12000) XLSM 6th tier
-  /** Varnish running cost per 1000 tours (Détails_PRIX_DEPLIANTS: 22 €/1000) */
+  /** Varnish running cost per 1000 tours (XLSM: 20 €/1000, corrected from 22) */
   runningCostVernis?: number;
-  paperMarginRate: number;             // 0.15 (XLSM)
+  fixedSetupFlat?: number; // Cout fixe for flat products (50 EUR)
+  paperMarginRate: number;             // 0.10 (XLSM, corrected from 0.15)
+
+  // Per-component discount rates (XLSM Détails PRIX remise system)
+  // Applied as: final = base × (1 - discount). Default 0 = no discount.
+  discountPlates?: number;       // 0.25 = 25% off plate costs
+  discountCalage?: number;       // 0.10 = 10% off calage costs
+  discountRoulage?: number;      // 0.10 = 10% off running costs
+  discountFichiers?: number;     // 0.50 = 50% off file processing
+  discountFaconnage?: number;    // 0.10 = 10% off binding/finishing
+  discountPelliculage?: number;  // 0.00 = 0% off lamination
 }
 
 export interface OffsetBindingTier {
@@ -36,10 +46,42 @@ export interface OffsetBindingTier {
   roulagePer1000: number;
 }
 
+export interface OffsetBindingRules {
+  supplement_grammage_min?: number;
+  supplement_papier_lt70g?: number;
+  supplement_couche_grammage_min?: number;
+  supplement_couche_satin_gt115g?: number;
+  supplement_couche_mat_gt115g?: number;
+  supplement_1_encart?: number;
+  supplement_2_encarts?: number;
+  supplement_dos_min_mm?: number;
+  supplement_dos_max_mm?: number;
+  supplement_dos_hors_range?: number;
+  supplement_cahiers_melanges?: number;
+}
+
 export interface OffsetLaminationConfig {
   offsetPricePerM2: number;
   offsetCalageForfait: number;
   offsetMinimumBilling: number;
+}
+
+// ── Rainage (creasing) cost table — CLAUDE.md §4.10 ──────────────────────────
+const RAINAGE_TIERS: { cahiers: number; calage: number; roulagePer1000: number }[] = [
+  { cahiers: 1, calage: 25, roulagePer1000: 17 },
+  { cahiers: 2, calage: 25, roulagePer1000: 35 },
+  { cahiers: 3, calage: 25, roulagePer1000: 45 },
+  { cahiers: 4, calage: 25, roulagePer1000: 50 },
+  { cahiers: 5, calage: 35, roulagePer1000: 75 },
+  { cahiers: 6, calage: 35, roulagePer1000: 95 },
+  { cahiers: 7, calage: 55, roulagePer1000: 120 },
+];
+
+/** Calculate rainage (creasing) cost based on number of cahiers and quantity. */
+export function calcRainageCost(numCahiers: number, quantity: number): number {
+  if (numCahiers <= 0) return 0;
+  const tier = RAINAGE_TIERS.find(t => t.cahiers >= numCahiers) ?? RAINAGE_TIERS[RAINAGE_TIERS.length - 1];
+  return tier.calage + (quantity / 1000) * tier.roulagePer1000;
 }
 
 export interface OffsetInput {
@@ -74,6 +116,7 @@ export interface OffsetInput {
   // Binding (brochures)
   bindingTypeName: string | null;
   bindingOffsetTiers: OffsetBindingTier[];
+  bindingRules?: OffsetBindingRules;
   numCahiers: number;
   cahiersCount: number;
   /**
@@ -99,6 +142,13 @@ export interface OffsetInput {
   /** True when the COLOR MODE includes machine varnish (e.g. "Quadrichromie + Vernis Machine") */
   hasColorModeVarnish?: boolean;
 
+  /** Spine thickness in cm — used for binding supplement (dos <3mm or >35mm: +20%) */
+  spineThicknessCm?: number;
+  /** Number of encart (inserted) cahiers — 1: +5%, 2: +10% on binding */
+  encartedCahiers?: number;
+  /** Whether the brochure mixes cahiers and feuillets — if true: +20% on binding */
+  hasMixedCahiers?: boolean;
+
   config: OffsetConfig;
 }
 
@@ -110,16 +160,27 @@ export interface OffsetBreakdown {
   runningCost: number;
   fileProcessing: number;
   bindingCost: number;
+  /** Binding supplement percentage applied (for display), e.g. "papier <70g +20%, couché mat >115g +15%" */
+  bindingSurchargeDetail?: string;
+  rainageCost: number;
   laminationCost: number;
   foldCost: number;
   cuttingCost: number;
   packagingCost: number;
+  setupCostFlat?: number; // Added for flat products
   subtotal: number;
   deliveryCost: number;
   margin: number;
   /** XLSM: taux de marque = 1 - (total coutant / prix de vente) */
   tauxDeMarque?: number;
   total: number;
+  
+  // Batch Optimization Technical Output (Group B)
+  techNbFeuillesInt?: number;
+  techNbFeuillesPasseInt?: number;
+  techNbPlaquesInt?: number;
+  techNb1000Roule?: number;
+  techNbCahiers?: number;
 }
 
 /** XLSM tiered running waste: ≤3k 0.2%, ≤5k 0.5%, ≤8k 0.6%, ≤10k 0.8% */
@@ -154,7 +215,7 @@ export function calcOffsetPrice(input: OffsetInput): OffsetBreakdown {
     interiorPaperTypeName, coverPaperTypeName,
     machineWidthCm, machineHeightCm, posesPerSheet,
     interiorPlatesPerSide, coverPlatesPerSide,
-    bindingTypeName, bindingOffsetTiers, numCahiers, cahiersCount, totalPlatesInterior: totalPlatesInteriorIn,
+    bindingTypeName, bindingOffsetTiers, bindingRules, numCahiers, cahiersCount, totalPlatesInterior: totalPlatesInteriorIn,
     laminationMode, laminationConfig, foldCost,
     packagingCost = 0,
     config,
@@ -165,6 +226,10 @@ export function calcOffsetPrice(input: OffsetInput): OffsetBreakdown {
   // --- Paper cost ---
   let paperCostInterior = 0;
   let paperCostCover = 0;
+
+  // Track tech variables for Group B
+  let techNbFeuillesInt = 0;
+  let techNbFeuillesPasseInt = 0;
 
   const hasVernis = laminationMode !== "Rien";
 
@@ -177,6 +242,10 @@ export function calcOffsetPrice(input: OffsetInput): OffsetBreakdown {
     // Gâche calage is per PRESS RUN (cahier), not per plate. Each cahier = 1 press setup.
     const interiorPressRuns = numCahiers;
     const interiorSheetsWithWaste = calcSheetsWithWaste(interiorBaseSheets, interiorPressRuns, config.gacheCalage, gacheTirageInterior, gacheVernisInterior);
+    
+    techNbFeuillesInt = interiorBaseSheets;
+    techNbFeuillesPasseInt = interiorSheetsWithWaste - interiorBaseSheets;
+
     paperCostInterior = calcPaperCostOffset({
       machineSheets: interiorSheetsWithWaste,
       machineWidthCm, machineHeightCm,
@@ -209,6 +278,10 @@ export function calcOffsetPrice(input: OffsetInput): OffsetBreakdown {
     // Flat product: 1 press run per side (recto=1, recto-verso=2)
     const flatPressRuns = sides;
     const flatSheetsWithWaste = calcSheetsWithWaste(flatBaseSheets, flatPressRuns, config.gacheCalage, gacheTirageFlat, gacheVernisFlat);
+    
+    techNbFeuillesInt = flatBaseSheets;
+    techNbFeuillesPasseInt = flatSheetsWithWaste - flatBaseSheets;
+
     paperCostInterior = calcPaperCostOffset({
       machineSheets: flatSheetsWithWaste,
       machineWidthCm, machineHeightCm,
@@ -224,10 +297,14 @@ export function calcOffsetPrice(input: OffsetInput): OffsetBreakdown {
     : interiorPlatesPerSide * sides;
   const numPlatesCover = hasCover ? coverPlatesPerSide * 2 : 0;
   const totalPlates = numPlatesInterior + numPlatesCover;
-  const plateCost = totalPlates * config.plateCost;
+  
+  const unitPlateCost = (machineWidthCm >= 70 || machineHeightCm >= 100) ? config.plateCostLarge : config.plateCost;
+  let plateCost = totalPlates * unitPlateCost;
+  plateCost *= 1 - (config.discountPlates ?? 0);
 
   // --- Calibration (add vernis calage when lamination) ---
-  const calageCost = totalPlates * config.calagePerPlate;
+  let calageCost = totalPlates * config.calagePerPlate;
+  calageCost *= 1 - (config.discountCalage ?? 0);
 
   // --- Running cost ---
   const totalSheets = hasCover
@@ -235,33 +312,101 @@ export function calcOffsetPrice(input: OffsetInput): OffsetBreakdown {
     : Math.ceil(quantity * sides / posesPerSheet);
   const runningRate = getRunningRate(totalSheets, config);
   let runningCost = (totalSheets / 1000) * runningRate;
-  // Varnish running cost: XLSM Tirage vernis = 22 €/1000 tours
+  // Varnish running cost: XLSM Tirage vernis = 20 €/1000 tours
   // Only applies when color mode includes machine varnish (5th plate), NOT for pelliculage
   if (input.hasColorModeVarnish && (config.runningCostVernis ?? 0) > 0) {
-    runningCost += (totalSheets / 1000) * (config.runningCostVernis ?? 22);
+    runningCost += (totalSheets / 1000) * (config.runningCostVernis ?? 20);
   }
+  runningCost *= 1 - (config.discountRoulage ?? 0);
 
   // --- File processing: XLSM flat 12.50 per treatment (interior = 1, cover = 1) ---
   const numTreatments = hasCover ? 2 : 1;
-  const fileProcessing = config.fileProcessingPerTreatment > 0
+  let fileProcessing = config.fileProcessingPerTreatment > 0
     ? config.fileProcessingPerTreatment * numTreatments
     : config.fileProcessingBase + totalPlates * config.fileProcessingPerPlate;
+  fileProcessing *= 1 - (config.discountFichiers ?? 0);
 
-  // --- Binding cost with XLSM supplementary surcharges ---
+  // --- Binding cost with XLSM supplementary surcharges (CLAUDE.md §4.9) ---
   let bindingCost = 0;
+  let bindingSurchargeDetail = "";
   if (hasCover && bindingTypeName) {
     const tier = findOffsetBindingTier(bindingOffsetTiers, cahiersCount);
     if (tier) {
       bindingCost = tier.calageCost + (quantity / 1000) * tier.roulagePer1000;
-      // Supplementary costs (XLSM Tableau Façonnage OFFSET): papier <70g +20%, couché satin >115g +5%, couché mat >115g +15%
+
+      // All 7 XLSM binding supplements from Tableau Façonnage OFFSET:
       let surchargePct = 0;
-      if (interiorGrammage < 70) surchargePct += 0.20;
-      const name = (interiorPaperTypeName ?? "").toLowerCase();
-      if (name.includes("satin") && interiorGrammage > 115) surchargePct += 0.05;
-      if (name.includes("mat") && interiorGrammage > 115) surchargePct += 0.15;
+      const surchargeReasons: string[] = [];
+
+      // 1. Papier intérieur < 70g
+      const limit1 = bindingRules?.supplement_grammage_min ?? 70;
+      const rate1 = bindingRules?.supplement_papier_lt70g ?? 0.20;
+      if (interiorGrammage < limit1) {
+        surchargePct += rate1;
+        surchargeReasons.push(`papier <${limit1}g +${rate1 * 100}%`);
+      }
+      // 2. Couché satin > 115g
+      const limit2 = bindingRules?.supplement_couche_grammage_min ?? 115;
+      const rateSatin = bindingRules?.supplement_couche_satin_gt115g ?? 0.05;
+      const intName = (interiorPaperTypeName ?? "").toLowerCase();
+      if (intName.includes("satin") && interiorGrammage > limit2) {
+        surchargePct += rateSatin;
+        surchargeReasons.push(`couché satin >${limit2}g +${rateSatin * 100}%`);
+      }
+      // 3. Couché mat > 115g
+      const rateMat = bindingRules?.supplement_couche_mat_gt115g ?? 0.15;
+      if (intName.includes("mat") && interiorGrammage > limit2) {
+        surchargePct += rateMat;
+        surchargeReasons.push(`couché mat >${limit2}g +${rateMat * 100}%`);
+      }
+      // 4. 1 cahier encarté à cheval
+      const rateEncart1 = bindingRules?.supplement_1_encart ?? 0.05;
+      if ((input.encartedCahiers ?? 0) === 1) {
+        surchargePct += rateEncart1;
+        surchargeReasons.push(`1 cahier encarté +${rateEncart1 * 100}%`);
+      }
+      // 5. 2 cahiers encartés
+      const rateEncart2 = bindingRules?.supplement_2_encarts ?? 0.10;
+      if ((input.encartedCahiers ?? 0) >= 2) {
+        surchargePct += rateEncart2;
+        surchargeReasons.push(`2+ cahiers encartés +${rateEncart2 * 100}%`);
+      }
+      // 6. Dos < 3mm or > 35mm
+      const spine = input.spineThicknessCm ?? 0;
+      const spineMm = spine * 10;
+      const minSpine = bindingRules?.supplement_dos_min_mm ?? 3;
+      const maxSpine = bindingRules?.supplement_dos_max_mm ?? 35;
+      const rateSpine = bindingRules?.supplement_dos_hors_range ?? 0.20;
+      if (spineMm > 0 && (spineMm < minSpine || spineMm > maxSpine)) {
+        surchargePct += rateSpine;
+        surchargeReasons.push(`dos ${spineMm.toFixed(1)}mm (hors ${minSpine}-${maxSpine}mm) +${rateSpine * 100}%`);
+      }
+      // 7. Cahiers/feuillets mélangés
+      const rateMixed = bindingRules?.supplement_cahiers_melanges ?? 0.20;
+      if (input.hasMixedCahiers) {
+        surchargePct += rateMixed;
+        surchargeReasons.push(`cahiers mélangés +${rateMixed * 100}%`);
+      }
+
+      // Use coverPaperTypeName for cover-specific checks
+      const covName = (coverPaperTypeName ?? "").toLowerCase();
+      if (covName.includes("mat") && (input.coverGrammage ?? 0) > limit2) {
+        // Cover couché mat > 115g also adds +15% (same rule applies to cover)
+        // Only add if not already counted from interior
+        if (!intName.includes("mat") || interiorGrammage <= limit2) {
+          surchargePct += rateMat;
+          surchargeReasons.push(`couv. couché mat >${limit2}g +${rateMat * 100}%`);
+        }
+      }
+
       bindingCost *= 1 + surchargePct;
+      bindingCost *= 1 - (config.discountFaconnage ?? 0);
+      bindingSurchargeDetail = surchargeReasons.join(", ");
     }
   }
+
+  // --- Rainage (creasing) cost (CLAUDE.md §4.10) ---
+  const rainageCost = hasCover ? calcRainageCost(numCahiers, quantity) : 0;
 
   // --- Lamination cost ---
   let laminationCostValue = 0;
@@ -271,12 +416,18 @@ export function calcOffsetPrice(input: OffsetInput): OffsetBreakdown {
     const multiplier = laminationMode === "Pelliculage Recto Verso" ? 2 : 1;
     const rawCost = laminationConfig.offsetCalageForfait + areaM2 * multiplier * laminationConfig.offsetPricePerM2;
     laminationCostValue = Math.max(laminationConfig.offsetMinimumBilling, rawCost);
+    laminationCostValue *= 1 - (config.discountPelliculage ?? 0);
   }
 
   const deliveryCost = 0; // Added by engine.ts
 
+  let setupCostFlat = 0;
+  if (!hasCover && (config.fixedSetupFlat ?? 0) > 0) {
+    setupCostFlat = config.fixedSetupFlat ?? 0;
+  }
+
   const subtotal = paperCostInterior + paperCostCover + plateCost + calageCost
-    + runningCost + fileProcessing + bindingCost + laminationCostValue + foldCost + (input.cuttingCost ?? 0) + packagingCost;
+    + runningCost + fileProcessing + bindingCost + rainageCost + laminationCostValue + foldCost + (input.cuttingCost ?? 0) + packagingCost + setupCostFlat;
   const margin = subtotal * 0.07;
   const total = (subtotal + deliveryCost) * 1.07;
   const tauxDeMarque = total > 0 ? 1 - (subtotal + deliveryCost) / total : 0;
@@ -284,8 +435,17 @@ export function calcOffsetPrice(input: OffsetInput): OffsetBreakdown {
   return {
     paperCostInterior, paperCostCover,
     plateCost, calageCost, runningCost, fileProcessing,
-    bindingCost, laminationCost: laminationCostValue, foldCost,
+    bindingCost, bindingSurchargeDetail: bindingSurchargeDetail || undefined,
+    rainageCost,
+    laminationCost: laminationCostValue, foldCost,
     cuttingCost: (input.cuttingCost ?? 0),
-    packagingCost, subtotal, deliveryCost, margin, tauxDeMarque, total,
+    packagingCost,
+    setupCostFlat,
+    subtotal, deliveryCost, margin, tauxDeMarque, total,
+    techNbFeuillesInt, 
+    techNbFeuillesPasseInt, 
+    techNbPlaquesInt: numPlatesInterior, 
+    techNb1000Roule: totalSheets / 1000, 
+    techNbCahiers: numCahiers,
   };
 }

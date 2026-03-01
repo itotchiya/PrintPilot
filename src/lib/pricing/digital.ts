@@ -97,9 +97,9 @@ export interface DigitalInput {
   colorModeName: string;     // "Quadrichromie", "Noir", etc.
   colorModePlatesPerSide: number;  // 4 for CMYK, 1 for Noir, 2 for Bichromie
 
-  // Binding (brochures)
   bindingTypeName: string | null;
   bindingDigitalTiers: DigitalBindingTier[];
+  bindingRules?: unknown;
 
   // Lamination
   laminationMode: string;  // "Rien", "Pelliculage Recto", "Pelliculage Recto Verso"
@@ -221,15 +221,22 @@ export function calcDigitalPrice(input: DigitalInput): DigitalBreakdown {
     foldCount = 0,
     numModels = 1, numPoses = 1 } = input;
 
-  // --- Clicks ---
+  // --- Clicks and Sheets ---
   let clicksInterior = 0;
   let clicksCover = 0;
+  let sheetsInterior = 0;
+  let sheetsCover = 0;
 
+  const divIterior = getClickDivisorForFormat(clickDivisors, widthCm, heightCm);
+  
   if (hasCover) {
     clicksInterior = calcClicksInterior(clickDivisors, widthCm, heightCm, pagesInterior, quantity);
     clicksCover = calcClicksCover(clickDivisors, widthCm, heightCm, quantity);
+    sheetsInterior = (pagesInterior / 2) * (quantity / (divIterior.recto || 1));
+    sheetsCover = quantity / (divIterior.recto || 1);
   } else {
     clicksInterior = calcClicksFlat(clickDivisors, widthCm, heightCm, quantity, rectoVerso);
+    sheetsInterior = quantity / (divIterior.recto || 1);
   }
 
   // --- Click costs (XLSM rates: 0.03 color, 0.0065 mono) ---
@@ -237,9 +244,10 @@ export function calcDigitalPrice(input: DigitalInput): DigitalBreakdown {
   const clickCostCover = hasCover ? calcClickCost(clicksCover, 4, config) : 0; // cover always CMYK
 
   // --- Paper costs ---
-  const paperCostInterior = calcPaperCostDigital({ sheetsCount: clicksInterior, grammageData: interiorGrammageData });
+  // Paper uses actual sheets, not clicks (clicks can be double for RV!)
+  const paperCostInterior = calcPaperCostDigital({ sheetsCount: sheetsInterior, grammageData: interiorGrammageData });
   const paperCostCover = (hasCover && coverGrammageData)
-    ? calcPaperCostDigital({ sheetsCount: clicksCover, grammageData: coverGrammageData })
+    ? calcPaperCostDigital({ sheetsCount: sheetsCover, grammageData: coverGrammageData })
     : 0;
 
   // --- Setup cost: XLSM has no digital setup (0) ---
@@ -267,7 +275,7 @@ export function calcDigitalPrice(input: DigitalInput): DigitalBreakdown {
   // --- Lamination cost ---
   let laminationCost = 0;
   if (laminationMode !== "Rien") {
-    const laminationSheets = hasCover ? clicksCover : clicksInterior;
+    const laminationSheets = hasCover ? sheetsCover : sheetsInterior;
     const multiplier = laminationMode === "Pelliculage Recto Verso" ? 2 : 1;
     const totalSheets = laminationSheets * multiplier;
     const tier = findLaminationTier(laminationTiers, totalSheets);
