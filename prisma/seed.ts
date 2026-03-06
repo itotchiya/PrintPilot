@@ -559,7 +559,7 @@ async function main() {
   // Brillant = 0.25 €/m², Mat = 0.30 €/m², Soft Touch = 0.50 €/m²
   const laminationFinishesData = [
     { name: "Brillant", offsetPricePerM2: 0.25, offsetCalageForfait: 55.0, offsetMinimumBilling: 60.0 },
-    { name: "Mat", offsetPricePerM2: 0.30, offsetCalageForfait: 55.0, offsetMinimumBilling: 115.0 },
+    { name: "Mat", offsetPricePerM2: 0.30, offsetCalageForfait: 55.0, offsetMinimumBilling: 60.0 },  // FIXED: Excel alignment (was 115.0)
     { name: "Soft Touch", offsetPricePerM2: 0.50, offsetCalageForfait: 55.0, offsetMinimumBilling: 115.0 },
   ];
 
@@ -860,7 +860,7 @@ async function main() {
     { key: "running_cost_tier_4", value: 15.0, unit: "EUR/1000", description: "5001-10000 sheets" },
     { key: "running_cost_tier_5", value: 15.0, unit: "EUR/1000", description: "10001-12000 sheets" },
     { key: "running_cost_tier_6", value: 15.0, unit: "EUR/1000", description: ">12000 sheets (XLSM 6th tier)" },
-    { key: "running_cost_vernis", value: 22.0, unit: "EUR/1000", description: "Varnish running cost per 1000 tours (XLSM: 22)" },
+    { key: "running_cost_vernis", value: 20.0, unit: "EUR/1000", description: "Varnish running cost per 1000 tours (XLSM: 20)" },  // FIXED: Excel alignment (was 22.0)
     { key: "gache_recherche_teinte", value: 100, unit: "sheets", description: "Waste sheets for color matching" },
     { key: "fixed_setup_flat", value: 50.0, unit: "EUR", description: "Fixed setup cost for flat products (Cout fixe)" },
 
@@ -1016,19 +1016,9 @@ async function main() {
   console.log(`🖨️  ${machineFormatsData.length} machine formats created`);
 
   // ── 17. Format Click Divisors ────────────────────────────────────────────
-  const formatClickDivisorsData = [
-    { formatName: "A4 Francaise", divisorRecto: 1, divisorRectoVerso: 2 },
-    { formatName: "A4 Paysage", divisorRecto: 1, divisorRectoVerso: 2 },
-    { formatName: "A5 Francaise", divisorRecto: 2, divisorRectoVerso: 4 },
-    { formatName: "A5 Paysage", divisorRecto: 2, divisorRectoVerso: 4 },
-    { formatName: "A6 Francaise", divisorRecto: 4, divisorRectoVerso: 8 },
-  ];
-
-  for (const fcd of formatClickDivisorsData) {
-    const row = await prisma.formatClickDivisor.findFirst({ where: { fournisseurId: null, formatName: fcd.formatName } });
-    if (!row) await prisma.formatClickDivisor.create({ data: { ...fcd } });
-  }
-  console.log(`🧮 ${formatClickDivisorsData.length} format click divisors created`);
+  // NOTE: Set 1 removed (2026-03-06) - values were inverted causing 2-4× errors
+  // Correct values are in Set 2 (lines ~1050) using dimension-based format names
+  // Example: A4 (21x29.7) = divisorRecto: 2, divisorRectoVerso: 1 (not 1/2)
 
   // ── 18. Digital Cut Tiers (Numérique Coupe) ──────────────────────────────
   const digitalCutTiersData = [
