@@ -10,22 +10,34 @@ export async function GET() {
   }
 
   const user = session.user as { id: string; role: string };
-  if (user.role !== "ACHETEUR") {
+  // Allow both CLIENT and legacy ACHETEUR roles
+  if (user.role !== "CLIENT" && user.role !== "ACHETEUR") {
     return NextResponse.json(
-      { error: "Réservé aux Acheteurs" },
+      { error: "Réservé aux Clients" },
       { status: 403 }
     );
   }
 
-  const access = await prisma.acheteurFournisseurAccess.findMany({
-    where: { acheteurId: user.id },
-    include: { fournisseur: { select: { id: true, name: true } } },
+  const access = await prisma.supplierClientAccess.findMany({
+    where: { clientId: user.id },
+    include: { 
+      supplier: { 
+        select: { 
+          id: true, 
+          companyName: true,
+          logoUrl: true,
+          primaryColor: true,
+        } 
+      } 
+    },
   });
 
-  const fournisseurs = access.map((a) => ({
-    id: a.fournisseur.id,
-    name: a.fournisseur.name,
+  const suppliers = access.map((a) => ({
+    id: a.supplier.id,
+    name: a.supplier.companyName,
+    logoUrl: a.supplier.logoUrl,
+    primaryColor: a.supplier.primaryColor,
   }));
 
-  return NextResponse.json({ fournisseurs });
+  return NextResponse.json({ suppliers });
 }

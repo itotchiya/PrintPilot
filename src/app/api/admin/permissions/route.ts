@@ -10,57 +10,84 @@ export async function GET() {
     return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
   }
 
-  const acheteurs = await prisma.user.findMany({
-    where: { role: "ACHETEUR" },
+  // Get all clients with their supplier access
+  const clients = await prisma.user.findMany({
+    where: { role: "CLIENT" },
     select: {
       id: true,
       name: true,
       email: true,
-      acheteurAccess: {
-        select: {
-          fournisseurId: true,
-          fournisseur: { select: { id: true, name: true } },
-        },
-      },
     },
   });
 
-  const fournisseurs = await prisma.user.findMany({
-    where: { role: "FOURNISSEUR" },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
+  // Get supplier access for each client
+  const clientsWithAccess = await Promise.all(
+    clients.map(async (client) => {
+      const access = await prisma.supplierClientAccess.findMany({
+        where: { clientId: client.id },
+        include: {
+          supplier: {
+            select: { 
+              id: true,
+              companyName: true,
+              user: { select: { name: true } }
+            },
+          },
+        },
+      });
+      return {
+        ...client,
+        supplierIds: access.map((a) => a.supplierId),
+        suppliers: access.map((a) => ({ 
+          id: a.supplier.id, 
+          name: a.supplier.companyName || a.supplier.user?.name 
+        })),
+      };
+    })
+  );
+
+  // Get all suppliers
+  const suppliers = await prisma.supplierProfile.findMany({
+    select: { 
+      id: true, 
+      companyName: true,
+      user: { select: { name: true, email: true } }
+    },
+    orderBy: { companyName: "asc" },
   });
 
   return NextResponse.json({
-    acheteurs: acheteurs.map((a) => ({
-      id: a.id,
-      name: a.name,
-      email: a.email,
-      fournisseurIds: a.acheteurAccess.map((x) => x.fournisseurId),
-      fournisseurs: a.acheteurAccess.map((x) => ({ id: x.fournisseur.id, name: x.fournisseur.name })),
+    clients: clientsWithAccess,
+    suppliers: suppliers.map(s => ({
+      id: s.id,
+      name: s.companyName || s.user?.name,
+      email: s.user?.email,
     })),
-    fournisseurs,
   });
 }
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
-  const user = session?.user as { role?: string } | undefined;
+  const user = session?.user as { role?: string; id?: string } | undefined;
   if (user?.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
   }
 
   const body = await request.json();
-  const { acheteurId, fournisseurId } = body as { acheteurId?: string; fournisseurId?: string };
-  if (!acheteurId || !fournisseurId) {
+  const { clientId, supplierId } = body as { clientId?: string; supplierId?: string };
+  if (!clientId || !supplierId) {
     return NextResponse.json(
-      { error: "acheteurId et fournisseurId requis" },
+      { error: "clientId et supplierId requis" },
       { status: 400 }
     );
   }
 
-  const created = await prisma.acheteurFournisseurAccess.create({
-    data: { acheteurId, fournisseurId },
+  const created = await prisma.supplierClientAccess.create({
+    data: { 
+      clientId, 
+      supplierId,
+      invitedBy: user.id!,
+    },
   });
   return NextResponse.json(created, { status: 201 });
 }
@@ -73,17 +100,17 @@ export async function DELETE(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const acheteurId = searchParams.get("acheteurId");
-  const fournisseurId = searchParams.get("fournisseurId");
-  if (!acheteurId || !fournisseurId) {
+  const clientId = searchParams.get("clientId");
+  const supplierId = searchParams.get("supplierId");
+  if (!clientId || !supplierId) {
     return NextResponse.json(
-      { error: "Paramètres acheteurId et fournisseurId requis" },
+      { error: "Paramètres clientId et supplierId requis" },
       { status: 400 }
     );
   }
 
-  await prisma.acheteurFournisseurAccess.deleteMany({
-    where: { acheteurId, fournisseurId },
+  await prisma.supplierClientAccess.deleteMany({
+    where: { clientId, supplierId },
   });
   return new NextResponse(null, { status: 204 });
 }

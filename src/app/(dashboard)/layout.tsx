@@ -10,14 +10,20 @@ export default async function DashboardLayout({
 }) {
   const session = await getServerSession(authOptions);
   const role = (session?.user as { role?: string } | undefined)?.role;
+
+  // New 3-tier role system:
+  // - SUPER_ADMIN: Uses AdminSidebar (with full access)
+  // - SUPPLIER/FOURNISSEUR: Uses AdminSidebar (supplier-specific navigation)
+  // - CLIENT/ACHETEUR: Uses DashboardHeader (client navigation)
+  
   const useAdminSidebar =
     role === "SUPER_ADMIN" ||
+    role === "SUPPLIER" ||
     role === "FOURNISSEUR" ||
-    role === "ACHETEUR" ||
+    // Legacy roles for backward compatibility
     role === "ADMIN" ||
     role === "EMPLOYEE";
 
-  // SuperAdmin, Fournisseur, Acheteur (and legacy Admin/Employee) see the same sidebar layout
   if (useAdminSidebar) {
     return (
       <div className="flex min-h-screen bg-muted/30">

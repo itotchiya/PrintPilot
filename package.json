@@ -8,6 +8,9 @@
     "build:webpack": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "db:seed": "tsx prisma/seed.ts",
     "db:push": "prisma db push",
     "postinstall": "prisma generate"
@@ -35,8 +38,10 @@
     "react-day-picker": "^9.13.2",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.71.1",
+    "resend": "^6.9.3",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.1",
+    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {

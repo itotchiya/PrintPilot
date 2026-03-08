@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { errorResponse, markFournisseurConfigCustomized } from "../../../_helpers";
+import { errorResponse, markSupplierConfigCustomized } from "../../../_helpers";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -30,9 +30,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const grammage = await prisma.paperGrammage.create({
       data: { ...body, paperTypeId: id },
     });
-    const pt = await prisma.paperType.findUnique({ where: { id }, select: { fournisseurId: true } });
-    if (user?.role === "FOURNISSEUR" && user?.id && pt?.fournisseurId === user.id) {
-      await markFournisseurConfigCustomized(user.id);
+    const pt = await prisma.paperType.findUnique({ where: { id }, select: { supplierId: true } });
+    if (user?.role === "FOURNISSEUR" && user?.id && pt?.supplierId === user.id) {
+      await markSupplierConfigCustomized(user.id);
     }
     return NextResponse.json(grammage, { status: 201 });
   } catch (error) {
@@ -67,9 +67,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const updated = await prisma.paperGrammage.findUnique({
       where: { id: grammageId },
     });
-    const pt = await prisma.paperType.findUnique({ where: { id: paperTypeId }, select: { fournisseurId: true } });
-    if (user?.role === "FOURNISSEUR" && user?.id && pt?.fournisseurId === user.id) {
-      await markFournisseurConfigCustomized(user.id);
+    const pt = await prisma.paperType.findUnique({ where: { id: paperTypeId }, select: { supplierId: true } });
+    if (user?.role === "FOURNISSEUR" && user?.id && pt?.supplierId === user.id) {
+      await markSupplierConfigCustomized(user.id);
     }
     return NextResponse.json(updated);
   } catch (error) {
@@ -98,9 +98,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         paperTypeId,
       },
     });
-    const pt = await prisma.paperType.findUnique({ where: { id: paperTypeId }, select: { fournisseurId: true } });
-    if (user?.role === "FOURNISSEUR" && user?.id && pt?.fournisseurId === user.id) {
-      await markFournisseurConfigCustomized(user.id);
+    const pt = await prisma.paperType.findUnique({ where: { id: paperTypeId }, select: { supplierId: true } });
+    if (user?.role === "FOURNISSEUR" && user?.id && pt?.supplierId === user.id) {
+      await markSupplierConfigCustomized(user.id);
     }
     return new NextResponse(null, { status: 204 });
   } catch (error) {

@@ -72,8 +72,8 @@ export async function POST(request: NextRequest) {
       deliveryCost?: number;
       weightPerCopyGrams?: number;
       selectedMethod?: string;
-      fournisseurResults?: Array<{
-        fournisseurId: string;
+      multiSupplierResults?: Array<{
+        supplierId: string;
         fournisseurName: string;
         digitalTotal: number;
         offsetTotal: number;
@@ -170,8 +170,8 @@ export async function POST(request: NextRequest) {
           body.weightPerCopyGrams && body.quantity
             ? (body.weightPerCopyGrams * body.quantity) / 1000
             : null,
-        fournisseurResults: body.fournisseurResults
-          ? (JSON.parse(JSON.stringify(body.fournisseurResults)) as never)
+        multiSupplierResults: body.multiSupplierResults
+          ? (JSON.parse(JSON.stringify(body.multiSupplierResults)) as never)
           : undefined,
       },
     });

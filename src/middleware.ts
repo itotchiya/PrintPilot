@@ -1,34 +1,126 @@
-import { withAuth } from "next-auth/middleware";
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-const ADMIN_ROLES = ["ADMIN", "EMPLOYEE", "SUPER_ADMIN", "FOURNISSEUR"];
-const SUPER_ADMIN_ONLY_PATHS = ["/admin/users", "/admin/permissions"];
+/**
+ * Next.js Middleware
+ * 
+ * Handles security checks at the edge before requests reach the application.
+ */
 
-export default withAuth(
-  function middleware(req) {
-    const token = req.nextauth.token;
-    const pathname = req.nextUrl.pathname;
+// Routes that should be protected by rate limiting
+const RATE_LIMITED_ROUTES = [
+  '/api/auth/',
+  '/api/invitations',
+];
 
-    if (pathname.startsWith("/admin")) {
-      const isSuperAdminOnly = SUPER_ADMIN_ONLY_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
-      if (isSuperAdminOnly) {
-        if (token?.role !== "SUPER_ADMIN") {
-          return NextResponse.redirect(new URL("/admin", req.url));
-        }
-      } else if (!token?.role || !ADMIN_ROLES.includes(token.role as string)) {
-        return NextResponse.redirect(new URL("/dashboard", req.url));
-      }
-    }
+// Public routes that don't require checks
+const PUBLIC_ROUTES = [
+  '/_next/',
+  '/static/',
+  '/favicon.ico',
+  '/robots.txt',
+  '/api/auth/providers',
+  '/api/auth/csrf',
+];
 
-    return NextResponse.next();
-  },
-  {
-    callbacks: {
-      authorized: ({ token }) => !!token,
-    },
+/**
+ * Check if a path should skip middleware checks
+ */
+function isPublicRoute(path: string): boolean {
+  return PUBLIC_ROUTES.some((route) => path.startsWith(route));
+}
+
+/**
+ * Check if a path should be rate limited
+ */
+function isRateLimitedRoute(path: string): boolean {
+  return RATE_LIMITED_ROUTES.some((route) => path.startsWith(route));
+}
+
+/**
+ * Get client IP from request headers
+ */
+function getClientIp(request: NextRequest): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
   }
-);
+
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp) {
+    return realIp;
+  }
+
+  return 'unknown';
+}
+
+/**
+ * Validate request origin for API routes
+ */
+function validateOrigin(request: NextRequest): boolean {
+  // Skip origin check for same-origin requests
+  const origin = request.headers.get('origin');
+  if (!origin) {
+    return true; // Allow requests without origin (curl, mobile apps)
+  }
+
+  const allowedOrigins = [
+    process.env.NEXTAUTH_URL,
+    'http://localhost:3000',
+    'https://localhost:3000',
+  ].filter(Boolean);
+
+  return allowedOrigins.some((allowed) => origin === allowed);
+}
+
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Skip public routes
+  if (isPublicRoute(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Create response
+  const response = NextResponse.next();
+
+  // Add security headers (defense in depth)
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('X-XSS-Protection', '1; mode=block');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  // Validate origin for API routes
+  if (pathname.startsWith('/api/')) {
+    if (!validateOrigin(request)) {
+      return new NextResponse(
+        JSON.stringify({ error: 'Invalid origin' }),
+        {
+          status: 403,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    }
+  }
+
+  // Log suspicious requests (optional, for monitoring)
+  if (pathname.includes('..') || pathname.includes('//')) {
+    console.warn(`[Security] Suspicious path detected: ${pathname} from ${getClientIp(request)}`);
+  }
+
+  return response;
+}
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*"],
+  matcher: [
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!_next/static|_next/image|favicon.ico).*)',
+  ],
 };

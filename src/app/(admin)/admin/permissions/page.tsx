@@ -23,7 +23,7 @@ interface AcheteurRow {
   id: string;
   name: string;
   email: string;
-  fournisseurIds: string[];
+  supplierIds: string[];
   fournisseurs: { id: string; name: string }[];
 }
 
@@ -45,14 +45,14 @@ export default function AdminPermissionsPage() {
     fetchData().finally(() => setLoading(false));
   }, [fetchData]);
 
-  const toggle = async (acheteurId: string, fournisseurId: string, checked: boolean) => {
-    setUpdating(acheteurId);
+  const toggle = async (clientId: string, supplierId: string, checked: boolean) => {
+    setUpdating(clientId);
     try {
       if (checked) {
         const res = await fetch("/api/admin/permissions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ acheteurId, fournisseurId }),
+          body: JSON.stringify({ clientId, supplierId }),
         });
         if (!res.ok) {
           const json = await res.json();
@@ -60,7 +60,7 @@ export default function AdminPermissionsPage() {
         }
       } else {
         const res = await fetch(
-          `/api/admin/permissions?acheteurId=${encodeURIComponent(acheteurId)}&fournisseurId=${encodeURIComponent(fournisseurId)}`,
+          `/api/admin/permissions?clientId=${encodeURIComponent(clientId)}&supplierId=${encodeURIComponent(supplierId)}`,
           { method: "DELETE" }
         );
         if (!res.ok) throw new Error("Erreur");
@@ -106,7 +106,7 @@ export default function AdminPermissionsPage() {
                     </div>
                   </TableCell>
                   {fournisseurs.map((f) => {
-                    const hasAccess = a.fournisseurIds.includes(f.id);
+                    const hasAccess = a.supplierIds.includes(f.id);
                     return (
                       <TableCell key={f.id} className="text-center">
                         <Checkbox

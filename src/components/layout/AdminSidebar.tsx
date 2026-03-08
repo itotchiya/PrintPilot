@@ -20,7 +20,6 @@ import {
 import {
   LayoutDashboard,
   Calculator,
-  Briefcase,
   FileText,
   PlusCircle,
   Palette,
@@ -33,6 +32,7 @@ import {
   Settings,
   Cpu,
   Percent,
+  Printer,
   Menu,
   LogOut,
   ChevronUp,
@@ -41,52 +41,94 @@ import {
   Monitor,
   Users,
   ShieldCheck,
+  Building2,
 } from "lucide-react";
 
 // ─── Navigation structure ─────────────────────────────────────────────────────
 
-const topLinksAdmin = [
-  { label: "Tableau de bord", href: "/admin", icon: LayoutDashboard, exact: true },
-  { label: "Moteur de calcul", href: "/admin/config", icon: Calculator, exact: true },
-  { label: "Devis com.", href: "/admin/quotes", icon: Briefcase },
-  { label: "Mes devis", href: "/quotes", icon: FileText, badge: true },
-  { label: "Nouveau devis", href: "/dashboard/new", icon: PlusCircle },
-];
-
+// Navigation Super Admin
 const topLinksSuperAdmin = [
+  { label: "Tableau de bord", href: "/admin", icon: LayoutDashboard, exact: true },
+  { label: "Fournisseurs", href: "/admin/suppliers", icon: Building2 },
+  { label: "Configuration", href: "/admin/config", icon: Calculator, exact: true },
   { label: "Utilisateurs", href: "/admin/users", icon: Users },
   { label: "Permissions", href: "/admin/permissions", icon: ShieldCheck },
 ];
 
-const topLinksAcheteur = [
-  { label: "Tableau de bord", href: "/quotes", icon: LayoutDashboard, exact: true },
-  { label: "Mes devis", href: "/quotes", icon: FileText, badge: true },
-  { label: "Nouveau devis", href: "/dashboard/new", icon: PlusCircle },
+// Navigation Fournisseur
+const topLinksSupplier = [
+  { label: "Tableau de bord", href: "/supplier/dashboard", icon: LayoutDashboard, exact: true },
+  { label: "Mes clients", href: "/supplier/clients", icon: Users },
+  { label: "Devis", href: "/supplier/quotes", icon: FileText, exact: true },
+  { label: "Configuration", href: "/supplier/config", icon: Calculator, exact: true },
+  { label: "Marque", href: "/supplier/branding", icon: Palette },
 ];
 
-const engineLinks = [
-  { label: "Papiers", href: "/admin/config/paper", icon: FileText },
+// Liens création de devis — Fournisseur
+const quoteLinksSupplier = [
+  { label: "Nouveau devis", href: "/supplier/quotes/new", icon: PlusCircle, exact: true },
+  { label: "Numérique", href: "/supplier/quotes/new-digital", icon: Cpu, exact: true },
+  { label: "Offset", href: "/supplier/quotes/new-offset", icon: Printer, exact: true },
+];
+
+// Engine configuration links for Supplier
+const engineLinksSupplier = [
+  { label: "Papers", href: "/supplier/config/paper", icon: FileText },
+  { label: "Formats", href: "/supplier/config/formats", icon: Ruler },
+  { label: "Colors", href: "/supplier/config/colors", icon: Palette },
+  { label: "Finishing", href: "/supplier/config/finishing", icon: Paintbrush },
+  { label: "Folds", href: "/supplier/config/folds", icon: Scissors },
+  { label: "Lamination", href: "/supplier/config/lamination", icon: Layers },
+  { label: "Packaging", href: "/supplier/config/packaging", icon: Package },
+  { label: "Delivery", href: "/supplier/config/delivery", icon: Truck },
+  { label: "Offset Costs", href: "/supplier/config/offset", icon: Settings },
+  { label: "Digital Costs", href: "/supplier/config/digital", icon: Cpu },
+  { label: "Margins", href: "/supplier/config/margins", icon: Percent },
+];
+
+// Navigation Client
+const topLinksClient = [
+  { label: "Tableau de bord", href: "/client/dashboard", icon: LayoutDashboard, exact: true },
+  { label: "Mes devis", href: "/client/quotes", icon: FileText, badge: true },
+  { label: "Mes fournisseurs", href: "/client/suppliers", icon: Building2 },
+];
+
+// Liens création de devis — Client
+const quoteLinksClient = [
+  { label: "Nouveau devis", href: "/client/quotes/new", icon: PlusCircle, exact: true },
+  { label: "Numérique", href: "/client/quotes/new-digital", icon: Cpu, exact: true },
+  { label: "Offset", href: "/client/quotes/new-offset", icon: Printer, exact: true },
+];
+
+// Engine configuration links (for Super Admin only)
+const engineLinksSuperAdmin = [
+  { label: "Papers", href: "/admin/config/paper", icon: FileText },
   { label: "Formats", href: "/admin/config/formats", icon: Ruler },
-  { label: "Couleurs d'impression", href: "/admin/config/colors", icon: Palette },
-  { label: "Façonnage", href: "/admin/config/finishing", icon: Paintbrush },
-  { label: "Plis", href: "/admin/config/folds", icon: Scissors },
-  { label: "Pelliculage", href: "/admin/config/lamination", icon: Layers },
-  { label: "Conditionnement", href: "/admin/config/packaging", icon: Package },
-  { label: "Livraison", href: "/admin/config/delivery", icon: Truck },
-  { label: "Coûts Offset", href: "/admin/config/offset", icon: Settings },
-  { label: "Coûts Numérique", href: "/admin/config/digital", icon: Cpu },
-  { label: "Marges", href: "/admin/config/margins", icon: Percent },
+  { label: "Colors", href: "/admin/config/colors", icon: Palette },
+  { label: "Finishing", href: "/admin/config/finishing", icon: Paintbrush },
+  { label: "Folds", href: "/admin/config/folds", icon: Scissors },
+  { label: "Lamination", href: "/admin/config/lamination", icon: Layers },
+  { label: "Packaging", href: "/admin/config/packaging", icon: Package },
+  { label: "Delivery", href: "/admin/config/delivery", icon: Truck },
+  { label: "Offset Costs", href: "/admin/config/offset", icon: Settings },
+  { label: "Digital Costs", href: "/admin/config/digital", icon: Cpu },
+  { label: "Margins", href: "/admin/config/margins", icon: Percent },
 ];
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 
 function SidebarLogo({ role }: { role?: string }) {
-  const href = role === "ACHETEUR" ? "/dashboard" : "/admin";
+  // Determine home href based on role
+  let href = "/dashboard";
+  if (role === "SUPER_ADMIN") href = "/admin";
+  else if (role === "SUPPLIER" || role === "FOURNISSEUR") href = "/supplier/dashboard";
+  else if (role === "CLIENT" || role === "ACHETEUR") href = "/client/dashboard";
+  
   return (
     <Link
       href={href}
       className="flex h-14 shrink-0 items-center border-b border-border px-5"
-      aria-label="PrintPilot"
+      aria-label="PrintQuote"
     >
       <Logo className="h-6 w-auto max-w-[148px]" />
     </Link>
@@ -157,18 +199,31 @@ function SidebarNav({
   const isActive = (href: string, exact = false) =>
     exact ? pathname === href : pathname.startsWith(href);
 
-  const isAcheteur = role === "ACHETEUR";
+  // Determine navigation based on role
   const isSuperAdmin = role === "SUPER_ADMIN";
-  const topLinks = isAcheteur
-    ? topLinksAcheteur
-    : [...topLinksAdmin, ...(isSuperAdmin ? topLinksSuperAdmin : [])];
+  const isSupplier = role === "SUPPLIER" || role === "FOURNISSEUR";
+
+  let topLinks = topLinksClient;
+  let engineLinks: typeof engineLinksSuperAdmin = [];
+  let quoteLinks: typeof quoteLinksSupplier = [];
+
+  if (isSuperAdmin) {
+    topLinks = topLinksSuperAdmin;
+    engineLinks = engineLinksSuperAdmin;
+  } else if (isSupplier) {
+    topLinks = topLinksSupplier;
+    engineLinks = engineLinksSupplier;
+    quoteLinks = quoteLinksSupplier;
+  } else {
+    quoteLinks = quoteLinksClient;
+  }
 
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-      {/* Top group — Gestion */}
+      {/* Main Navigation */}
       <div>
         <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-          Gestion
+          {isSuperAdmin ? "Administration" : isSupplier ? "Gestion" : "Navigation"}
         </p>
         <ul className="space-y-0.5">
           {topLinks.map((link) => (
@@ -185,11 +240,32 @@ function SidebarNav({
         </ul>
       </div>
 
-      {/* Bottom group — Moteur de calcul (hidden for Acheteur) */}
-      {!isAcheteur && (
+      {/* New Devis Section */}
+      {quoteLinks.length > 0 && (
         <div>
           <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-            Moteur de calcul
+            Nouveau Devis
+          </p>
+          <ul className="space-y-0.5">
+            {quoteLinks.map((link) => (
+              <NavLink
+                key={link.href}
+                href={link.href}
+                icon={link.icon}
+                label={link.label}
+                active={isActive(link.href)}
+                onClick={onNavigate}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Engine Configuration */}
+      {engineLinks.length > 0 && (
+        <div>
+          <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+            Configuration
           </p>
           <ul className="space-y-0.5">
             {engineLinks.map((link) => (
@@ -216,7 +292,7 @@ function SidebarProfile() {
   const { theme, setTheme } = useTheme();
   if (!session?.user) return null;
 
-  const name = session.user.name ?? "Utilisateur";
+  const name = session.user.name ?? "User";
   const email = session.user.email ?? "";
   const role = (session.user as { role?: string }).role ?? "CLIENT";
 
@@ -227,14 +303,23 @@ function SidebarProfile() {
     .toUpperCase()
     .slice(0, 2);
 
+  // Updated role labels for 3-tier system
   const roleLabel: Record<string, string> = {
     SUPER_ADMIN: "Super Admin",
-    ADMIN: "Administrateur",
-    EMPLOYEE: "Employé",
-    FOURNISSEUR: "Fournisseur",
-    ACHETEUR: "Acheteur",
+    SUPPLIER: "Supplier",
     CLIENT: "Client",
+    // Legacy role mappings
+    ADMIN: "Administrator",
+    EMPLOYEE: "Employee",
+    FOURNISSEUR: "Supplier",
+    ACHETEUR: "Client",
   };
+
+  // Determine dashboard link based on role
+  let dashboardHref = "/dashboard";
+  if (role === "SUPER_ADMIN") dashboardHref = "/admin";
+  else if (role === "SUPPLIER" || role === "FOURNISSEUR") dashboardHref = "/supplier/dashboard";
+  else if (role === "CLIENT" || role === "ACHETEUR") dashboardHref = "/client/dashboard";
 
   return (
     <div className="shrink-0 border-t border-border px-3 py-3">
@@ -262,7 +347,7 @@ function SidebarProfile() {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <div className="px-2 py-1.5">
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">Thème</p>
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">Theme</p>
             <div className="flex gap-1">
               <button
                 onClick={() => setTheme("light")}
@@ -274,7 +359,7 @@ function SidebarProfile() {
                 )}
               >
                 <Sun className="h-3.5 w-3.5" />
-                Clair
+                Light
               </button>
               <button
                 onClick={() => setTheme("dark")}
@@ -286,7 +371,7 @@ function SidebarProfile() {
                 )}
               >
                 <Moon className="h-3.5 w-3.5" />
-                Sombre
+                Dark
               </button>
               <button
                 onClick={() => setTheme("system")}
@@ -304,18 +389,18 @@ function SidebarProfile() {
           </div>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
-            <Link href="/quotes" className="cursor-pointer">
-              <FileText className="mr-2 h-4 w-4" />
-              Mes devis
+            <Link href={dashboardHref} className="cursor-pointer">
+              <LayoutDashboard className="mr-2 h-4 w-4" />
+              Dashboard
             </Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={() => signOut({ callbackUrl: "/" })}
+            onClick={() => signOut({ callbackUrl: "/login" })}
             className="cursor-pointer text-destructive focus:text-destructive"
           >
             <LogOut className="mr-2 h-4 w-4" />
-            Se déconnecter
+            Sign Out
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -351,7 +436,7 @@ export function AdminSidebar() {
         <SheetTrigger asChild>
           <button
             className="md:hidden fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg"
-            aria-label="Ouvrir le menu"
+            aria-label="Open menu"
           >
             <Menu className="h-5 w-5" />
           </button>

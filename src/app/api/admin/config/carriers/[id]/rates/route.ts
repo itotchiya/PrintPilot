@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { errorResponse, markFournisseurConfigCustomized } from "../../../_helpers";
+import { errorResponse, markSupplierConfigCustomized } from "../../../_helpers";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -29,9 +29,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const rate = await prisma.deliveryRate.create({
       data: { ...body, carrierId: id },
     });
-    const carrier = await prisma.carrier.findUnique({ where: { id }, select: { fournisseurId: true } });
-    if (user?.role === "FOURNISSEUR" && user?.id && carrier?.fournisseurId === user.id) {
-      await markFournisseurConfigCustomized(user.id);
+    const carrier = await prisma.carrier.findUnique({ where: { id }, select: { supplierId: true } });
+    if (user?.role === "FOURNISSEUR" && user?.id && carrier?.supplierId === user.id) {
+      await markSupplierConfigCustomized(user.id);
     }
     return NextResponse.json(rate, { status: 201 });
   } catch (error) {
@@ -64,11 +64,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const updated = await prisma.deliveryRate.findUnique({
       where: { id: rateId },
     });
-    const carrier = await prisma.carrier.findUnique({ where: { id: carrierId }, select: { fournisseurId: true } });
+    const carrier = await prisma.carrier.findUnique({ where: { id: carrierId }, select: { supplierId: true } });
     const session = await getServerSession(authOptions);
     const user = session?.user as { id?: string; role?: string } | undefined;
-    if (user?.role === "FOURNISSEUR" && user?.id && carrier?.fournisseurId === user.id) {
-      await markFournisseurConfigCustomized(user.id);
+    if (user?.role === "FOURNISSEUR" && user?.id && carrier?.supplierId === user.id) {
+      await markSupplierConfigCustomized(user.id);
     }
     return NextResponse.json(updated);
   } catch (error) {
@@ -94,9 +94,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     await prisma.deliveryRate.deleteMany({
       where: { id: rateId, carrierId },
     });
-    const carrier = await prisma.carrier.findUnique({ where: { id: carrierId }, select: { fournisseurId: true } });
-    if (user?.role === "FOURNISSEUR" && user?.id && carrier?.fournisseurId === user.id) {
-      await markFournisseurConfigCustomized(user.id);
+    const carrier = await prisma.carrier.findUnique({ where: { id: carrierId }, select: { supplierId: true } });
+    if (user?.role === "FOURNISSEUR" && user?.id && carrier?.supplierId === user.id) {
+      await markSupplierConfigCustomized(user.id);
     }
     return new NextResponse(null, { status: 204 });
   } catch (error) {

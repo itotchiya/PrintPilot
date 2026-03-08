@@ -11,11 +11,12 @@ datasource db {
 
 enum Role {
   SUPER_ADMIN
-  ADMIN
-  EMPLOYEE
-  FOURNISSEUR
-  ACHETEUR
+  ADMIN        // Kept for internal/platform admin use
+  EMPLOYEE     // Legacy - will migrate
+  FOURNISSEUR  // Legacy - will migrate to SUPPLIER
+  ACHETEUR     // Legacy - will migrate to CLIENT
   CLIENT
+  SUPPLIER     // New - preferred over FOURNISSEUR
 }
 
 enum QuoteStatus {
@@ -45,6 +46,42 @@ enum Orientation {
   SQUARE
 }
 
+enum InvitationType {
+  SUPPLIER
+  CLIENT
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+enum OnboardingStep {
+  INVITED
+  ACCOUNT_CREATED
+  CONFIG_STARTED
+  CONFIG_COMPLETED
+  BRANDING_SET
+  COMPLETE
+}
+
+enum SubscriptionStatus {
+  PENDING
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum ActivityType {
+  QUOTE_CREATED
+  PDF_DOWNLOADED
+  CLIENT_INVITED
+  CLIENT_JOINED
+  CONFIG_UPDATED
+}
+
 // ─── USER & AUTH ──────────────────────────────────────────────────────────────
 
 model User {
@@ -53,28 +90,146 @@ model User {
   email               String      @unique
   passwordHash        String
   role                Role        @default(CLIENT)
-  configCustomizedAt  DateTime?   // set when Fournisseur first changes/adds config (hides demo alert)
+  emailVerified       DateTime?   // For invitation acceptance tracking
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
+  
+  // Relations based on role
   quotes              Quote[]
-  acheteurAccess      AcheteurFournisseurAccess[] @relation("AcheteurAccess")
-  fournisseurAccess   AcheteurFournisseurAccess[] @relation("FournisseurAccess")
-
+  supplierProfile     SupplierProfile?
+  clientAccess        SupplierClientAccess[] @relation("ClientAccess")
+  
+  // Track who invited this user (if applicable)
+  invitedBy           String?
+  
   @@index([email])
   @@index([role])
 }
 
-model AcheteurFournisseurAccess {
-  id             String   @id @default(cuid())
-  acheteurId     String
-  fournisseurId  String
-  acheteur       User     @relation("AcheteurAccess", fields: [acheteurId], references: [id], onDelete: Cascade)
-  fournisseur    User     @relation("FournisseurAccess", fields: [fournisseurId], references: [id], onDelete: Cascade)
-  createdAt      DateTime @default(now())
+// ─── SUPPLIER PROFILE ─────────────────────────────────────────────────────────
 
-  @@unique([acheteurId, fournisseurId])
-  @@index([acheteurId])
-  @@index([fournisseurId])
+model SupplierProfile {
+  id                  String             @id @default(cuid())
+  userId              String             @unique
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Company Info
+  companyName         String
+  logoUrl             String?
+  
+  // Branding for PDFs
+  primaryColor        String             @default("#3B8BEB")
+  secondaryColor      String?            // Optional accent color
+  
+  // Contact info for quotes
+  address             String?
+  phone               String?
+  website             String?
+  
+  // Onboarding Progress
+  onboardingStep      OnboardingStep     @default(INVITED)
+  onboardingCompletedAt DateTime?
+  
+  // Status
+  isActive            Boolean            @default(false)
+  subscriptionStatus  SubscriptionStatus @default(PENDING)
+  
+  // Plan info
+  planType            String             @default("trial") // trial, monthly, annual, usage
+  planStartedAt       DateTime?
+  planExpiresAt       DateTime?
+  
+  // Default config flag - if true, uses system defaults
+  usesDefaultConfig   Boolean            @default(true)
+  
+  // Relations
+  clients             SupplierClientAccess[]
+  activityLogs        ActivityLog[]
+  
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  
+  @@index([userId])
+  @@index([isActive])
+  @@index([subscriptionStatus])
+}
+
+// ─── SUPPLIER-CLIENT RELATIONSHIP ─────────────────────────────────────────────
+
+model SupplierClientAccess {
+  id          String          @id @default(cuid())
+  supplierId  String
+  supplier    SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  clientId    String
+  client      User            @relation("ClientAccess", fields: [clientId], references: [id], onDelete: Cascade)
+  
+  // Invitation tracking
+  invitedBy   String          // User ID who sent invitation (usually supplier)
+  invitedAt   DateTime        @default(now())
+  
+  // Client can be shared across multiple suppliers
+  notes       String?         // Supplier's private notes about this client
+  
+  createdAt   DateTime        @default(now())
+  
+  @@unique([supplierId, clientId])
+  @@index([supplierId])
+  @@index([clientId])
+}
+
+// ─── INVITATIONS ──────────────────────────────────────────────────────────────
+
+model Invitation {
+  id          String           @id @default(cuid())
+  email       String
+  token       String           @unique
+  type        InvitationType
+  
+  // Who sent the invitation
+  invitedBy   String           // User ID
+  
+  // For CLIENT invitations - which supplier is inviting
+  supplierId  String?          // SupplierProfile ID
+  
+  // Status tracking
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  acceptedByUserId String?     // Set when invitation is accepted
+  
+  // Metadata
+  companyName String?          // For SUPPLIER invites
+  notes       String?          // Optional message
+  
+  createdAt   DateTime         @default(now())
+  
+  @@index([token])
+  @@index([email])
+  @@index([status])
+  @@index([supplierId])
+}
+
+// ─── ACTIVITY LOG ─────────────────────────────────────────────────────────────
+
+model ActivityLog {
+  id          String          @id @default(cuid())
+  supplierId  String?
+  supplier    SupplierProfile? @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  
+  clientId    String?         // User ID of the client who performed the action
+  
+  type        ActivityType
+  metadata    Json?           // Flexible metadata based on activity type
+  
+  // For quotes
+  quoteId     String?
+  
+  createdAt   DateTime        @default(now())
+  
+  @@index([supplierId])
+  @@index([clientId])
+  @@index([type])
+  @@index([createdAt])
 }
 
 // ─── QUOTES ───────────────────────────────────────────────────────────────────
@@ -120,6 +275,7 @@ model Quote {
   packaging         Json?
   deliveryPoints    Json?
 
+  // Legacy single-supplier fields (kept for backward compatibility)
   digitalPrice      Decimal?
   offsetPrice       Decimal?
   digitalBreakdown  Json?
@@ -130,7 +286,17 @@ model Quote {
   weightPerCopy     Decimal?
   totalWeight       Decimal?
 
-  fournisseurResults Json?
+  // NEW: Multi-supplier quote support
+  // Stores results for all suppliers that were compared
+  multiSupplierResults Json?    // { [supplierId: string]: { price, breakdown, method, ... } }
+  
+  // Which supplier the client selected (if any)
+  selectedSupplierId String?
+  
+  // PDF tracking
+  pdfDownloaded     Boolean     @default(false)
+  pdfDownloadedAt   DateTime?
+  pdfDownloadCount  Int         @default(0)
 
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
@@ -138,13 +304,15 @@ model Quote {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+  @@index([selectedSupplierId])
 }
 
 // ─── PAPER CONFIG ─────────────────────────────────────────────────────────────
+// NOTE: When fournisseurId is NULL, these are DEFAULT configs managed by Super Admin
 
 model PaperType {
   id             String          @id @default(cuid())
-  fournisseurId  String?
+  supplierId     String?         // NULL = default config (Super Admin managed)
   name           String
   category       PaperCategory   @default(BOTH)
   active         Boolean         @default(true)
@@ -153,8 +321,8 @@ model PaperType {
   updatedAt      DateTime        @updatedAt
   grammages      PaperGrammage[]
 
-  @@unique([fournisseurId, name])
-  @@index([fournisseurId])
+  @@unique([supplierId, name])
+  @@index([supplierId])
 }
 
 model PaperGrammage {
@@ -178,7 +346,7 @@ model PaperGrammage {
 
 model FormatPreset {
   id             String        @id @default(cuid())
-  fournisseurId  String?
+  supplierId     String?       // NULL = default config
   name           String
   widthCm        Decimal
   heightCm       Decimal
@@ -188,15 +356,15 @@ model FormatPreset {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  @@unique([fournisseurId, name])
-  @@index([fournisseurId])
+  @@unique([supplierId, name])
+  @@index([supplierId])
 }
 
 // ─── COLOR CONFIG ─────────────────────────────────────────────────────────────
 
 model ColorMode {
   id              String    @id @default(cuid())
-  fournisseurId   String?
+  supplierId      String?   // NULL = default config
   name            String
   platesPerSide   Int
   hasVarnish      Boolean   @default(false)
@@ -205,15 +373,15 @@ model ColorMode {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  @@unique([fournisseurId, name])
-  @@index([fournisseurId])
+  @@unique([supplierId, name])
+  @@index([supplierId])
 }
 
 // ─── BINDING / FINISHING CONFIG ───────────────────────────────────────────────
 
 model BindingType {
   id                String                    @id @default(cuid())
-  fournisseurId     String?
+  supplierId        String?                   // NULL = default config
   name              String
   minPages          Int
   maxPages          Int?
@@ -227,8 +395,8 @@ model BindingType {
   digitalPriceTiers BindingPriceTierDigital[]
   offsetPriceTiers  BindingPriceTierOffset[]
 
-  @@unique([fournisseurId, name])
-  @@index([fournisseurId])
+  @@unique([supplierId, name])
+  @@index([supplierId])
 }
 
 model BindingPriceTierDigital {
@@ -264,7 +432,7 @@ model BindingPriceTierOffset {
 
 model FoldType {
   id              String      @id @default(cuid())
-  fournisseurId   String?
+  supplierId      String?     // NULL = default config
   name            String
   maxFolds        Int         @default(6)
   canBeSecondary  Boolean     @default(false)
@@ -273,8 +441,8 @@ model FoldType {
   updatedAt       DateTime    @updatedAt
   costs           FoldCost[]
 
-  @@unique([fournisseurId, name])
-  @@index([fournisseurId])
+  @@unique([supplierId, name])
+  @@index([supplierId])
 }
 
 model FoldCost {
@@ -294,18 +462,18 @@ model FoldCost {
 
 model LaminationMode {
   id             String    @id @default(cuid())
-  fournisseurId  String?
+  supplierId     String?   // NULL = default config
   name           String
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  @@unique([fournisseurId, name])
-  @@index([fournisseurId])
+  @@unique([supplierId, name])
+  @@index([supplierId])
 }
 
 model LaminationFinish {
   id                    String                  @id @default(cuid())
-  fournisseurId         String?
+  supplierId            String?                 // NULL = default config
   name                  String
   offsetPricePerM2      Decimal?
   offsetCalageForfait   Decimal?
@@ -315,8 +483,8 @@ model LaminationFinish {
   updatedAt             DateTime                @updatedAt
   digitalPriceTiers     LaminationPriceTier[]
 
-  @@unique([fournisseurId, name])
-  @@index([fournisseurId])
+  @@unique([supplierId, name])
+  @@index([supplierId])
 }
 
 model LaminationPriceTier {
@@ -337,7 +505,7 @@ model LaminationPriceTier {
 
 model PackagingOption {
   id             String    @id @default(cuid())
-  fournisseurId  String?
+  supplierId     String?   // NULL = default config
   name           String
   type           String
   costPerUnit    Decimal   @default(0)
@@ -347,8 +515,8 @@ model PackagingOption {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  @@unique([fournisseurId, name])
-  @@index([fournisseurId])
+  @@unique([supplierId, name])
+  @@index([supplierId])
 }
 
 // ─── DELIVERY CONFIG ──────────────────────────────────────────────────────────
@@ -368,7 +536,7 @@ model Department {
 
 model Carrier {
   id                    String                 @id @default(cuid())
-  fournisseurId         String?
+  supplierId            String?                // NULL = default config
   name                  String
   active                Boolean                @default(true)
   createdAt             DateTime               @default(now())
@@ -376,8 +544,8 @@ model Carrier {
   deliveryRates         DeliveryRate[]
   transportRatesByDept  TransportRateByDept[]
 
-  @@unique([fournisseurId, name])
-  @@index([fournisseurId])
+  @@unique([supplierId, name])
+  @@index([supplierId])
 }
 
 model DeliveryRate {
@@ -412,10 +580,11 @@ model TransportRateByDept {
 }
 
 // ─── OFFSET / DIGITAL / MARGIN CONFIG (Key-Value) ─────────────────────────────
+// NOTE: When supplierId is NULL, these are DEFAULT configs managed by Super Admin
 
 model OffsetConfig {
   id             String    @id @default(cuid())
-  fournisseurId  String?
+  supplierId     String?   // NULL = default config (Super Admin managed)
   key            String
   value          Decimal
   unit           String?
@@ -423,13 +592,13 @@ model OffsetConfig {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  @@unique([fournisseurId, key])
-  @@index([fournisseurId])
+  @@unique([supplierId, key])
+  @@index([supplierId])
 }
 
 model DigitalConfig {
   id             String    @id @default(cuid())
-  fournisseurId  String?
+  supplierId     String?   // NULL = default config (Super Admin managed)
   key            String
   value          Decimal
   unit           String?
@@ -437,31 +606,31 @@ model DigitalConfig {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  @@unique([fournisseurId, key])
-  @@index([fournisseurId])
+  @@unique([supplierId, key])
+  @@index([supplierId])
 }
 
 // ─── MARGIN CONFIG ─────────────────────────────────────────────────────────────
 
 model MarginConfig {
   id             String    @id @default(cuid())
-  fournisseurId  String?
-  key            String    // Expected keys: "digital_markup" (usually 1.05), "offset_markup" (usually 1.07), "paper_margin"
+  supplierId     String?   // NULL = default config (Super Admin managed)
+  key            String    // Expected keys: "digital_markup", "offset_markup", "paper_margin"
   value          Decimal
   unit           String?
   description    String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  @@unique([fournisseurId, key])
-  @@index([fournisseurId])
+  @@unique([supplierId, key])
+  @@index([supplierId])
 }
 
 // ─── MACHINE / IMPOSITION CONFIG ──────────────────────────────────────────────
 
 model MachineFormat {
   id             String    @id @default(cuid())
-  fournisseurId  String?
+  supplierId     String?   // NULL = default config (Super Admin managed)
   name           String
   widthCm        Decimal
   heightCm       Decimal
@@ -476,35 +645,66 @@ model MachineFormat {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  @@unique([fournisseurId, name])
-  @@index([fournisseurId])
+  @@unique([supplierId, name])
+  @@index([supplierId])
 }
 
 model FormatClickDivisor {
   id                String    @id @default(cuid())
-  fournisseurId     String?
+  supplierId        String?   // NULL = default config (Super Admin managed)
   formatName        String
   divisorRecto      Decimal
   divisorRectoVerso Decimal
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  @@unique([fournisseurId, formatName])
-  @@index([fournisseurId])
+  @@unique([supplierId, formatName])
+  @@index([supplierId])
 }
 
 // ─── DIGITAL CUTTING CONFIG ───────────────────────────────────────────────────
 
 model DigitalCutTier {
-  id             String    @id @default(cuid())
-  fournisseurId  String?
+  id             String      @id @default(cuid())
+  supplierId     String?     // NULL = default config (Super Admin managed)
   productType    ProductType // BROCHURE vs FLYER
   qtyMax         Int
   perUnitCost    Decimal
-  setupCost      Decimal   @default(10.0)
+  setupCost      Decimal     @default(10.0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([supplierId])
+  @@index([supplierId, productType])
+}
+
+// ─── DEFAULT CONFIG MANAGEMENT ────────────────────────────────────────────────
+// Tracks which config items have been copied from defaults to supplier
+
+model SupplierConfigStatus {
+  id             String    @id @default(cuid())
+  supplierId     String    @unique
+  
+  // Flags for each config category
+  hasPaperTypes         Boolean @default(false)
+  hasFormatPresets      Boolean @default(false)
+  hasColorModes         Boolean @default(false)
+  hasBindingTypes       Boolean @default(false)
+  hasFoldTypes          Boolean @default(false)
+  hasLamination         Boolean @default(false)
+  hasPackaging          Boolean @default(false)
+  hasCarriers           Boolean @default(false)
+  hasOffsetConfig       Boolean @default(false)
+  hasDigitalConfig      Boolean @default(false)
+  hasMarginConfig       Boolean @default(false)
+  hasMachineFormats     Boolean @default(false)
+  hasDigitalCutTiers    Boolean @default(false)
+  
+  // When defaults were last copied
+  lastCopiedAt   DateTime?
+  
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
-
-  @@index([fournisseurId])
-  @@index([fournisseurId, productType])
+  
+  @@index([supplierId])
 }

@@ -79,7 +79,7 @@ function normalizeFormat(
 
 export async function calculatePricing(
   input: QuoteInput,
-  fournisseurId?: string | null
+  supplierId?: string | null
 ): Promise<PricingResult> {
   if (!input.productType || !input.quantity) {
     throw new Error("Donnees de devis incompletes : type de produit et quantite requis");
@@ -87,8 +87,8 @@ export async function calculatePricing(
 
   const format = normalizeFormat(input.format);
 
-  const scope = fournisseurId ?? null;
-  const scopeWhere = { fournisseurId: scope };
+  const scope = supplierId ?? null;
+  const scopeWhere = { supplierId: scope };
 
   const [
     paperTypes,

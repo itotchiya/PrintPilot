@@ -98,8 +98,8 @@ interface Quote {
   selectedMethod: string | null;
   weightPerCopy: string | null;
   totalWeight: string | null;
-  fournisseurResults?: Array<{
-    fournisseurId: string;
+  multiSupplierResults?: Array<{
+    supplierId: string;
     fournisseurName: string;
     digitalTotal: number;
     offsetTotal: number;
@@ -271,11 +271,11 @@ export default function QuoteDetailPage() {
       </p>
 
       {/* Multi-Fournisseur comparison (Acheteur) */}
-      {quote.fournisseurResults && quote.fournisseurResults.length > 0 && (
+      {quote.multiSupplierResults && quote.multiSupplierResults.length > 0 && (
         <div className="space-y-4">
           <h3 className="text-lg font-semibold">Comparaison par Fournisseur</h3>
-          {quote.fournisseurResults.map((r) => (
-            <Card key={r.fournisseurId}>
+          {quote.multiSupplierResults.map((r) => (
+            <Card key={r.supplierId}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">{r.fournisseurName}</CardTitle>
               </CardHeader>
@@ -299,7 +299,7 @@ export default function QuoteDetailPage() {
       )}
 
       {/* Price comparison (single) */}
-      {!(quote.fournisseurResults && quote.fournisseurResults.length > 0) &&
+      {!(quote.multiSupplierResults && quote.multiSupplierResults.length > 0) &&
         (digitalPrice != null || offsetPrice != null) && (
         <div className="grid gap-4 sm:grid-cols-2">
           {/* Digital */}

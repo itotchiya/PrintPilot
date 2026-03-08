@@ -22,9 +22,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as {
       quoteInput: QuoteInput;
-      fournisseurIds: string[];
+      supplierIds: string[];
     };
-    const { quoteInput, fournisseurIds } = body;
+    const { quoteInput, supplierIds } = body;
 
     if (!quoteInput?.productType || !quoteInput?.quantity || quoteInput.quantity <= 0) {
       return NextResponse.json(
@@ -32,19 +32,19 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (!Array.isArray(fournisseurIds) || fournisseurIds.length === 0) {
+    if (!Array.isArray(supplierIds) || supplierIds.length === 0) {
       return NextResponse.json(
-        { error: "fournisseurIds (tableau non vide) requis" },
+        { error: "supplierIds (tableau non vide) requis" },
         { status: 400 }
       );
     }
 
-    const allowed = await prisma.acheteurFournisseurAccess.findMany({
-      where: { acheteurId: user.id, fournisseurId: { in: fournisseurIds } },
-      select: { fournisseurId: true },
+    const allowed = await prisma.supplierClientAccess.findMany({
+      where: { clientId: user.id, supplierId: { in: supplierIds } },
+      select: { supplierId: true },
     });
-    const allowedIds = new Set(allowed.map((a) => a.fournisseurId));
-    const toRun = fournisseurIds.filter((id) => allowedIds.has(id));
+    const allowedIds = new Set(allowed.map((a) => a.supplierId));
+    const toRun = supplierIds.filter((id) => allowedIds.has(id));
     if (toRun.length === 0) {
       return NextResponse.json(
         { error: "Aucun Fournisseur autorisé dans la liste" },
@@ -52,15 +52,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const fournisseurs = await prisma.user.findMany({
+    const suppliers = await prisma.user.findMany({
       where: { id: { in: toRun }, role: "FOURNISSEUR" },
       select: { id: true, name: true },
     });
-    const nameById = Object.fromEntries(fournisseurs.map((u) => [u.id, u.name]));
+    const nameById = Object.fromEntries(suppliers.map((u) => [u.id, u.name]));
 
     const results: Array<{
-      fournisseurId: string;
-      fournisseurName: string;
+      supplierId: string;
+      supplierName: string;
       digitalTotal: number;
       offsetTotal: number;
       digitalBreakdown: unknown;
@@ -72,8 +72,8 @@ export async function POST(request: NextRequest) {
     for (const fid of toRun) {
       const result = await calculatePricing(quoteInput, fid);
       results.push({
-        fournisseurId: fid,
-        fournisseurName: nameById[fid] ?? fid,
+        supplierId: fid,
+        supplierName: nameById[fid] ?? fid,
         digitalTotal: result.digitalTotal,
         offsetTotal: result.offsetTotal,
         digitalBreakdown: result.digitalBreakdown,

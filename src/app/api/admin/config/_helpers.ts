@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-/** Categories that are scoped by fournisseurId (default config when null). Department (delivery) is global. */
+/** Categories that are scoped by supplierId (default config when null). Department (delivery) is global. */
 const SCOPED_CATEGORIES = new Set([
   "paper",
   "formats",
@@ -75,15 +75,20 @@ export function getModel(modelName: string): any {
   return (prisma as Record<string, any>)[modelName];
 }
 
-/** Call after a Fournisseur successfully creates/updates/deletes their config (hides demo alert). Never throws. */
-export async function markFournisseurConfigCustomized(userId: string) {
+/** Call after a Supplier successfully creates/updates/deletes their config. Updates the config status. */
+export async function markSupplierConfigCustomized(userId: string) {
   try {
-    await prisma.user.updateMany({
-      where: { id: userId, configCustomizedAt: null },
-      data: { configCustomizedAt: new Date() },
+    const supplier = await prisma.supplierProfile.findUnique({
+      where: { userId },
     });
+    if (supplier) {
+      await prisma.supplierConfigStatus.update({
+        where: { supplierId: supplier.id },
+        data: { lastCopiedAt: new Date() },
+      });
+    }
   } catch {
-    // Column may not exist yet (migration not run); don't break config save
+    // Don't break config save
   }
 }
 

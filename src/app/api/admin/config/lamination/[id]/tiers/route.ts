@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { errorResponse, markFournisseurConfigCustomized } from "../../../_helpers";
+import { errorResponse, markSupplierConfigCustomized } from "../../../_helpers";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -29,9 +29,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const tier = await prisma.laminationPriceTier.create({
       data: { ...body, finishId: id },
     });
-    const lf = await prisma.laminationFinish.findUnique({ where: { id }, select: { fournisseurId: true } });
-    if (user?.role === "FOURNISSEUR" && user?.id && lf?.fournisseurId === user.id) {
-      await markFournisseurConfigCustomized(user.id);
+    const lf = await prisma.laminationFinish.findUnique({ where: { id }, select: { supplierId: true } });
+    if (user?.role === "FOURNISSEUR" && user?.id && lf?.supplierId === user.id) {
+      await markSupplierConfigCustomized(user.id);
     }
     return NextResponse.json(tier, { status: 201 });
   } catch (error) {
@@ -65,9 +65,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const updated = await prisma.laminationPriceTier.findUnique({
       where: { id: tierId },
     });
-    const lf = await prisma.laminationFinish.findUnique({ where: { id: finishId }, select: { fournisseurId: true } });
-    if (user?.role === "FOURNISSEUR" && user?.id && lf?.fournisseurId === user.id) {
-      await markFournisseurConfigCustomized(user.id);
+    const lf = await prisma.laminationFinish.findUnique({ where: { id: finishId }, select: { supplierId: true } });
+    if (user?.role === "FOURNISSEUR" && user?.id && lf?.supplierId === user.id) {
+      await markSupplierConfigCustomized(user.id);
     }
     return NextResponse.json(updated);
   } catch (error) {
@@ -93,9 +93,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     await prisma.laminationPriceTier.deleteMany({
       where: { id: tierId, finishId },
     });
-    const lf = await prisma.laminationFinish.findUnique({ where: { id: finishId }, select: { fournisseurId: true } });
-    if (user?.role === "FOURNISSEUR" && user?.id && lf?.fournisseurId === user.id) {
-      await markFournisseurConfigCustomized(user.id);
+    const lf = await prisma.laminationFinish.findUnique({ where: { id: finishId }, select: { supplierId: true } });
+    if (user?.role === "FOURNISSEUR" && user?.id && lf?.supplierId === user.id) {
+      await markSupplierConfigCustomized(user.id);
     }
     return new NextResponse(null, { status: 204 });
   } catch (error) {

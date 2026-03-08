@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { CATEGORY_CONFIG, getModel, errorResponse, isScopedCategory, markFournisseurConfigCustomized } from "../_helpers";
+import { CATEGORY_CONFIG, getModel, errorResponse, isScopedCategory, markSupplierConfigCustomized } from "../_helpers";
 
 type RouteParams = { params: Promise<{ category: string }> };
 
@@ -11,10 +11,10 @@ function getConfigScope(
   userId: string | undefined
 ): string | null {
   if (!role || !userId) return null;
-  if (role === "FOURNISSEUR" || role === "ADMIN" || role === "EMPLOYEE") return userId;
+  if (role === "FOURNISSEUR" || role === "SUPPLIER" || role === "ADMIN" || role === "EMPLOYEE") return userId;
   if (role === "SUPER_ADMIN") {
     const { searchParams } = new URL(request.url);
-    const q = searchParams.get("fournisseurId");
+    const q = searchParams.get("supplierId");
     return q ?? null;
   }
   return null;
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const model = getModel(config.model);
     const where = isScopedCategory(category)
-      ? { fournisseurId: scope ?? null }
+      ? { supplierId: scope ?? null }
       : undefined;
     const data = await model.findMany({
       ...(where && { where }),
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   const session = await getServerSession(authOptions);
   const user = session?.user as { id?: string; role?: string } | undefined;
-  const canWrite = ["FOURNISSEUR", "SUPER_ADMIN", "ADMIN", "EMPLOYEE"].includes(user?.role ?? "");
+  const canWrite = ["FOURNISSEUR", "SUPPLIER", "SUPER_ADMIN", "ADMIN", "EMPLOYEE"].includes(user?.role ?? "");
   if (!canWrite) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
   }
@@ -84,11 +84,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ? { ...body, displayName: body.name ?? body.code ?? "" }
         : body;
     if (isScopedCategory(category) && scope !== undefined) {
-      data = { ...data, fournisseurId: scope };
+      data = { ...data, supplierId: scope };
     }
     const created = await model.create({ data });
     if (user?.role === "FOURNISSEUR" && scope === user?.id && user?.id) {
-      await markFournisseurConfigCustomized(user.id);
+      await markSupplierConfigCustomized(user.id);
     }
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
   const session = await getServerSession(authOptions);
   const user = session?.user as { id?: string; role?: string } | undefined;
-  const canWrite = ["FOURNISSEUR", "SUPER_ADMIN", "ADMIN", "EMPLOYEE"].includes(user?.role ?? "");
+  const canWrite = ["FOURNISSEUR", "SUPPLIER", "SUPER_ADMIN", "ADMIN", "EMPLOYEE"].includes(user?.role ?? "");
   if (!canWrite) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
   }
@@ -123,7 +123,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const { id, ...data } = body;
     const model = getModel(config.model);
     const whereScope = isScopedCategory(category) && scope !== undefined
-      ? { fournisseurId: scope }
+      ? { supplierId: scope }
       : undefined;
 
     let updated;
@@ -150,7 +150,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     if (user?.role === "FOURNISSEUR" && scope === user?.id && user?.id) {
-      await markFournisseurConfigCustomized(user.id);
+      await markSupplierConfigCustomized(user.id);
     }
     return NextResponse.json(updated);
   } catch (error) {
@@ -171,7 +171,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
   const session = await getServerSession(authOptions);
   const user = session?.user as { id?: string; role?: string } | undefined;
-  const canWrite = ["FOURNISSEUR", "SUPER_ADMIN", "ADMIN", "EMPLOYEE"].includes(user?.role ?? "");
+  const canWrite = ["FOURNISSEUR", "SUPPLIER", "SUPER_ADMIN", "ADMIN", "EMPLOYEE"].includes(user?.role ?? "");
   if (!canWrite) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
   }
@@ -193,12 +193,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const model = getModel(config.model);
     const where = isScopedCategory(category) && scope !== undefined
-      ? { id, fournisseurId: scope }
+      ? { id, supplierId: scope }
       : { id };
     await model.delete({ where });
 
     if (user?.role === "FOURNISSEUR" && scope === user?.id && user?.id) {
-      await markFournisseurConfigCustomized(user.id);
+      await markSupplierConfigCustomized(user.id);
     }
     return new NextResponse(null, { status: 204 });
   } catch (error) {

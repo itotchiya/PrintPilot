@@ -4,7 +4,7 @@ import type { QuoteInput } from "@/lib/pricing/types";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as QuoteInput & { fournisseurId?: string | null };
+    const body = (await request.json()) as QuoteInput & { supplierId?: string | null };
 
     if (!body.productType || !body.quantity || body.quantity <= 0) {
       return NextResponse.json(
@@ -13,8 +13,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { fournisseurId, ...quoteInput } = body;
-    const result = await calculatePricing(quoteInput, fournisseurId);
+    const { supplierId, ...quoteInput } = body;
+    const result = await calculatePricing(quoteInput, supplierId);
 
     return NextResponse.json({
       status: "ok",

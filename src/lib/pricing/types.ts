@@ -29,6 +29,8 @@ export interface QuoteInput {
   productType: ProductType | null;
   // Step 2
   quantity: number;
+  /** "digital" or "offset" for single-method wizard, undefined for hybrid mode */
+  calculationMethod?: "digital" | "offset";
   format: QuoteFormat | null;
   openFormat: { widthCm: number; heightCm: number } | null;
   // Step 3 (brochures only)

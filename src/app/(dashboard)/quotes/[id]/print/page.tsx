@@ -96,14 +96,14 @@ export default async function QuotePrintPage({ params }: Props) {
         ? "Impression Offset"
         : "—";
 
-  const fournisseurResults = (quote.fournisseurResults as Array<{
-    fournisseurId: string;
+  const multiSupplierResults = (quote.multiSupplierResults as Array<{
+    supplierId: string;
     fournisseurName: string;
     digitalTotal: number;
     offsetTotal: number;
     deliveryCost?: number;
   }> | null) ?? null;
-  const hasFournisseurComparison = Array.isArray(fournisseurResults) && fournisseurResults.length > 0;
+  const hasFournisseurComparison = Array.isArray(multiSupplierResults) && multiSupplierResults.length > 0;
 
   const sColor = statusColor(quote.status);
 
@@ -520,8 +520,8 @@ export default async function QuotePrintPage({ params }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {fournisseurResults!.map((r) => (
-                  <tr key={r.fournisseurId}>
+                {multiSupplierResults!.map((r) => (
+                  <tr key={r.supplierId}>
                     <td style={{ padding: "8px 14px", borderBottom: "1px solid #e9ecef", color: "#212529" }}>
                       {r.fournisseurName}
                     </td>

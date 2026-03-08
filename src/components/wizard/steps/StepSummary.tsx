@@ -55,8 +55,23 @@ interface PricingResult {
 }
 
 interface BatchResultItem extends PricingResult {
-  fournisseurId: string;
+  supplierId: string;
   fournisseurName: string;
+}
+
+/** Single-method calculation result (digital-only or offset-only) */
+interface SingleMethodPricingResult {
+  total: number;
+  breakdown: DigitalBreakdown | OffsetBreakdown;
+  deliveryCost: number;
+  weightPerCopyGrams: number;
+  currency: "EUR";
+  calculationVariablesInputs?: CalculationVariable[];
+  calculationVariablesMethod?: CalculationVariable[];
+  error?: string | null;
+  suggestion?: string | null;
+  bestCarrierName?: string;
+  finishingExtras?: { uvVarnishCost: number; encartCost: number; recassageCost: number; rabatCost: number; total: number };
 }
 
 const PRODUCT_LABELS: Record<string, string> = {
@@ -327,6 +342,96 @@ function PreviewSections({ data }: { data: QuoteInput }) {
   );
 }
 
+function SingleMethodPriceCard({
+  title,
+  total,
+  breakdown,
+  method,
+  error,
+  suggestion,
+}: {
+  title: string;
+  total: number;
+  breakdown: DigitalBreakdown | OffsetBreakdown;
+  method: "digital" | "offset";
+  error?: string | null;
+  suggestion?: string | null;
+}) {
+  const isDigital = method === "digital";
+  const Icon = isDigital ? Monitor : Layers;
+  const hasError = Boolean(error);
+  
+  return (
+    <Card className={hasError ? "border-destructive" : "border-primary ring-1 ring-primary shadow-md"}>
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${isDigital ? "bg-blue-100 dark:bg-blue-900/30" : "bg-amber-100 dark:bg-amber-900/30"}`}>
+              <Icon className={`h-4 w-4 ${isDigital ? "text-blue-600 dark:text-blue-400" : "text-amber-600 dark:text-amber-400"}`} />
+            </div>
+            <CardTitle className="text-base">{title}</CardTitle>
+          </div>
+          <Badge className={`text-xs ${isDigital ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"} border-transparent`}>
+            {isDigital ? "Numérique" : "Offset"}
+          </Badge>
+        </div>
+        {hasError ? (
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive space-y-1">
+            <p>{error}</p>
+            {suggestion && (
+              <p className="text-muted-foreground font-normal">Suggestion : {suggestion}</p>
+            )}
+          </div>
+        ) : (
+          <p className="text-3xl font-bold text-foreground tabular-nums">
+            {formatCurrency(total)}
+          </p>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!hasError && (
+          <>
+            <Separator className="mb-3" />
+            {isDigital ? (
+              <>
+                <BreakdownRow label="Clics intérieur" value={(breakdown as DigitalBreakdown).clickCostInterior} />
+                <BreakdownRow label="Clics couverture" value={(breakdown as DigitalBreakdown).clickCostCover} />
+                <BreakdownRow label="Papier intérieur" value={breakdown.paperCostInterior} />
+                <BreakdownRow label="Papier couverture" value={breakdown.paperCostCover} />
+                <BreakdownRow label="Mise en route" value={(breakdown as DigitalBreakdown).setupCost} />
+                <BreakdownRow label="Traitement fichier" value={(breakdown as DigitalBreakdown).fileProcessing} />
+                <BreakdownRow label="Pliage" value={(breakdown as DigitalBreakdown).foldCost ?? 0} alwaysShow />
+                <BreakdownRow label="Coupe" value={(breakdown as DigitalBreakdown).cuttingCost} alwaysShow />
+                <BreakdownRow label="Conditionnement" value={(breakdown as DigitalBreakdown).packagingCost} alwaysShow />
+              </>
+            ) : (
+              <>
+                <BreakdownRow label="Papier intérieur" value={breakdown.paperCostInterior} />
+                <BreakdownRow label="Papier couverture" value={breakdown.paperCostCover} />
+                <BreakdownRow label="Plaques" value={(breakdown as OffsetBreakdown).plateCost} />
+                <BreakdownRow label="Calage" value={(breakdown as OffsetBreakdown).calageCost} />
+                <BreakdownRow label="Roulage" value={(breakdown as OffsetBreakdown).runningCost} />
+                <BreakdownRow label="Fichiers" value={(breakdown as OffsetBreakdown).fileProcessing} />
+                <BreakdownRow label="Pliage" value={(breakdown as OffsetBreakdown).foldCost} alwaysShow />
+                <BreakdownRow label="Coupe" value={(breakdown as OffsetBreakdown).cuttingCost} alwaysShow />
+                <BreakdownRow label="Conditionnement" value={(breakdown as OffsetBreakdown).packagingCost} alwaysShow />
+              </>
+            )}
+            <BreakdownRow label="Reliure / Façonnage" value={breakdown.bindingCost} />
+            <BreakdownRow label="Pelliculage" value={breakdown.laminationCost} />
+            <BreakdownRow label="Livraison" value={breakdown.deliveryCost} />
+            <Separator className="my-2" />
+            <div className="flex justify-between text-sm font-semibold">
+              <span>Total HT</span>
+              <span className="tabular-nums">{formatCurrency(total)}</span>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function PriceCard({
   title,
   total,
@@ -520,6 +625,7 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
 
   const [isCalculating, setIsCalculating] = useState(false);
   const [result, setResult] = useState<PricingResult | null>(null);
+  const [singleMethodResult, setSingleMethodResult] = useState<SingleMethodPricingResult | null>(null);
   const [batchResult, setBatchResult] = useState<BatchResultItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<"digital" | "offset" | null>(null);
@@ -561,6 +667,11 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
     setIsCalculating(true);
     setError(null);
     setSaveState({ status: "idle" });
+    setSingleMethodResult(null);
+    
+    // Check if this is a single-method calculation
+    const isSingleMethod = data.calculationMethod === "digital" || data.calculationMethod === "offset";
+    
     const snapshot = getWizardTrackingSnapshot(data);
     if (typeof window !== "undefined") {
       console.groupCollapsed("[PrintPilot Wizard] Calcul — payload et snapshot");
@@ -569,25 +680,54 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
       if (isAcheteur && selectedFournisseurIds.length > 0) {
         console.log("Payload (calculate-batch)", {
           quoteInput: data,
-          fournisseurIds: selectedFournisseurIds,
+          supplierIds: selectedFournisseurIds,
         });
       } else if (!isAcheteur) {
         const body =
           role === "FOURNISSEUR" && (session?.user as { id?: string } | undefined)?.id
-            ? { ...data, fournisseurId: (session!.user as { id: string }).id }
+            ? { ...data, supplierId: (session!.user as { id: string }).id }
             : data;
         console.log("Payload (calculate)", body);
       }
       console.groupEnd();
     }
     try {
+      // Single-method calculation (digital-only or offset-only)
+      if (isSingleMethod) {
+        const method = data.calculationMethod!;
+        const res = await fetch("/api/pricing/calculate-single", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input: data, method }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? "Erreur de calcul");
+        
+        setSingleMethodResult(json.result as SingleMethodPricingResult);
+        setResult(null);
+        setBatchResult(null);
+        
+        // Auto-select the single method
+        setSelectedMethod(method);
+        
+        // Log result
+        if (typeof window !== "undefined") {
+          console.group(`%c[PrintPilot] Résultat ${method.toUpperCase()} uniquement`, "color:#10b981;font-weight:bold;font-size:13px");
+          console.log("Méthode:", method);
+          console.log("Total HT:", json.result.total);
+          console.log("Breakdown:", json.result.breakdown);
+          console.groupEnd();
+        }
+        return;
+      }
+      
       if (isAcheteur && selectedFournisseurIds.length > 0) {
         const res = await fetch("/api/pricing/calculate-batch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             quoteInput: data,
-            fournisseurIds: selectedFournisseurIds,
+            supplierIds: selectedFournisseurIds,
           }),
         });
         const json = await res.json();
@@ -597,7 +737,7 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
       } else if (!isAcheteur) {
         const body =
           role === "FOURNISSEUR" && (session?.user as { id?: string } | undefined)?.id
-            ? { ...data, fournisseurId: (session!.user as { id: string }).id }
+            ? { ...data, supplierId: (session!.user as { id: string }).id }
             : data;
         const res = await fetch("/api/pricing/calculate", {
           method: "POST",
@@ -774,6 +914,49 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
   }, [data, isAcheteur, selectedFournisseurIds, role, session?.user]);
 
   const handleSave = useCallback(async () => {
+    // Single-method save
+    if (singleMethodResult && data.calculationMethod) {
+      setSaveState({ status: "saving" });
+      const isDigital = data.calculationMethod === "digital";
+      const savePayload = {
+        ...data,
+        digitalTotal: isDigital ? singleMethodResult.total : 0,
+        offsetTotal: isDigital ? 0 : singleMethodResult.total,
+        digitalBreakdown: isDigital ? singleMethodResult.breakdown : null,
+        offsetBreakdown: isDigital ? null : singleMethodResult.breakdown,
+        deliveryCost: singleMethodResult.deliveryCost,
+        weightPerCopyGrams: singleMethodResult.weightPerCopyGrams,
+        selectedMethod: data.calculationMethod,
+      };
+      if (typeof window !== "undefined") {
+        const saveSnapshot = getWizardTrackingSnapshot(data);
+        console.groupCollapsed("[PrintPilot Wizard] Sauvegarde (single-method) — payload");
+        console.log("Tracking snapshot", saveSnapshot);
+        console.log("Payload (POST /api/quotes)", savePayload);
+        console.groupEnd();
+      }
+      try {
+        const res = await fetch("/api/quotes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(savePayload),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error);
+        setSaveState({
+          status: "saved",
+          quoteId: json.id,
+          quoteNumber: json.quoteNumber,
+        });
+      } catch (e) {
+        setSaveState({ status: "idle" });
+        toast.error(
+          e instanceof Error ? e.message : "Erreur lors de la sauvegarde"
+        );
+      }
+      return;
+    }
+    
     if (batchResult?.length) {
       setSaveState({ status: "saving" });
       const first = batchResult[0];
@@ -786,8 +969,8 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
         deliveryCost: first.deliveryCost,
         weightPerCopyGrams: first.weightPerCopyGrams,
         selectedMethod: first.digitalTotal <= first.offsetTotal ? "digital" : "offset",
-        fournisseurResults: batchResult.map((r) => ({
-          fournisseurId: r.fournisseurId,
+        multiSupplierResults: batchResult.map((r) => ({
+          supplierId: r.supplierId,
           fournisseurName: r.fournisseurName,
           digitalTotal: r.digitalTotal,
           offsetTotal: r.offsetTotal,
@@ -912,7 +1095,7 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
       )}
 
       {/* Calculate button */}
-      {!result && !(batchResult && batchResult.length > 0) && (
+      {!result && !singleMethodResult && !(batchResult && batchResult.length > 0) && (
         <Button
           onClick={handleCalculate}
           disabled={isCalculating || (isAcheteur && selectedFournisseurIds.length === 0)}
@@ -936,8 +1119,115 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
         </div>
       )}
 
+      {/* Results — single method (digital-only or offset-only) */}
+      {singleMethodResult && (
+        <div className="space-y-4">
+          {/* Full calculation variables — Superadmin & Fournisseur */}
+          {(role === "SUPER_ADMIN" || role === "FOURNISSEUR") &&
+            (singleMethodResult.calculationVariablesInputs?.length ||
+              singleMethodResult.calculationVariablesMethod?.length) && (
+              <div className="space-y-4">
+                {/* Entrées du calcul */}
+                {singleMethodResult.calculationVariablesInputs && singleMethodResult.calculationVariablesInputs.length > 0 && (
+                  <Card className="border-slate-200 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-900/20">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-medium text-slate-800 dark:text-slate-200">
+                        Entrées du calcul
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <VariableList variables={singleMethodResult.calculationVariablesInputs} />
+                    </CardContent>
+                  </Card>
+                )}
+                {/* Méthode utilisée */}
+                {singleMethodResult.calculationVariablesMethod && singleMethodResult.calculationVariablesMethod.length > 0 && (
+                  <Card className={data.calculationMethod === "digital" 
+                    ? "border-blue-200 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20" 
+                    : "border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20"}>
+                    <CardHeader className="pb-2">
+                      <CardTitle className={`text-base font-medium ${data.calculationMethod === "digital" ? "text-blue-800 dark:text-blue-200" : "text-amber-800 dark:text-amber-200"}`}>
+                        Détail du calcul — {data.calculationMethod === "digital" ? "Numérique" : "Offset"}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <VariableList variables={singleMethodResult.calculationVariablesMethod} />
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+
+          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+            <CheckCircle2 className="size-4" />
+            Calcul effectué — poids estimé :{" "}
+            {(singleMethodResult.weightPerCopyGrams / 1000).toFixed(3)} kg/ex.
+          </div>
+          
+          <SingleMethodPriceCard
+            title={data.calculationMethod === "digital" ? "Devis Numérique" : "Devis Offset"}
+            total={singleMethodResult.total}
+            breakdown={singleMethodResult.breakdown}
+            method={data.calculationMethod!}
+            error={singleMethodResult.error}
+            suggestion={singleMethodResult.suggestion}
+          />
+
+          <Button
+            variant="outline"
+            onClick={() => {
+              setSingleMethodResult(null);
+              setSaveState({ status: "idle" });
+            }}
+            className="w-full"
+          >
+            <RefreshCw className="size-4" />
+            Recalculer
+          </Button>
+
+          {saveState.status === "saved" ? (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-green-200 bg-green-50 dark:bg-green-950/20 p-4">
+              <CheckCircle2 className="size-5 text-green-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-green-800 dark:text-green-300">
+                  Devis {saveState.quoteNumber} enregistré
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" asChild>
+                  <a href={`/quotes/${saveState.quoteId}/print`}>
+                    <FileText className="mr-1.5 h-4 w-4" />
+                    Aperçu PDF
+                  </a>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={`/quotes/${saveState.quoteId}`}>
+                    Voir la fiche devis
+                  </a>
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              onClick={handleSave}
+              disabled={saveState.status === "saving"}
+              className="w-full"
+            >
+              {saveState.status === "saving" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Save className="size-4" />
+              )}
+              {saveState.status === "saving"
+                ? "Enregistrement…"
+                : "Enregistrer le devis"}
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Results — single (CLIENT / default) */}
-      {result && !batchResult?.length && (
+      {result && !batchResult?.length && !singleMethodResult && (
         <div className="space-y-4">
           {/* Full calculation variables — Superadmin & Fournisseur */}
           {(role === "SUPER_ADMIN" || role === "FOURNISSEUR") &&
@@ -1081,7 +1371,7 @@ export function StepSummary({ data, onNext, onReset }: StepProps) {
             Comparaison effectuée — {batchResult.length} fournisseur(s)
           </div>
           {batchResult.map((r) => (
-            <div key={r.fournisseurId} className="rounded-xl border p-4 space-y-3">
+            <div key={r.supplierId} className="rounded-xl border p-4 space-y-3">
               <p className="font-medium">{r.fournisseurName}</p>
               <div className="grid gap-4 sm:grid-cols-2">
                 <PriceCard

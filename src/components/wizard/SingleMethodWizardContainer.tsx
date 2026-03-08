@@ -1,0 +1,185 @@
+"use client";
+import { useCallback, useMemo } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, ArrowRight, Calculator, Loader2 } from "lucide-react";
+import { WizardProgress } from "./WizardProgress";
+import { useWizard } from "@/hooks/useWizard";
+import type { WizardStep } from "@/lib/pricing/types";
+import { validateStep } from "@/lib/pricing/wizard-validation";
+import { getStepLabel } from "@/lib/pricing/product-rules";
+import { getWizardTrackingSnapshot } from "@/lib/pricing/wizard-tracking";
+
+// Step components
+import { StepProductType } from "./steps/StepProductType";
+import { StepQuantityFormat } from "./steps/StepQuantityFormat";
+import { StepPages } from "./steps/StepPages";
+import { StepCouverture } from "./steps/StepCouverture";
+import { StepInterior } from "./steps/StepInterior";
+import { StepDelivery } from "./steps/StepDelivery";
+import { StepSummary } from "./steps/StepSummary";
+
+export interface SingleMethodWizardContainerProps {
+  /** "digital" or "offset" - forces single method calculation */
+  method: "digital" | "offset";
+  /** Title displayed at the top */
+  title: string;
+  /** Subtitle/description */
+  subtitle?: string;
+}
+
+export interface StepProps {
+  data: ReturnType<typeof useWizard>["data"];
+  updateData: ReturnType<typeof useWizard>["updateData"];
+  onNext: () => void;
+  onReset?: () => void;
+}
+
+export function SingleMethodWizardContainer({
+  method,
+  title,
+  subtitle,
+}: SingleMethodWizardContainerProps) {
+  const wizard = useWizard();
+  const {
+    currentStep,
+    visibleSteps,
+    completedSteps,
+    isFirstStep,
+    isLastStep,
+    isStepBeforeLast,
+  } = wizard;
+
+  // Set calculationMethod on first render if not already set
+  const { data, updateData } = wizard;
+  if (data.calculationMethod !== method) {
+    updateData({ calculationMethod: method });
+  }
+
+  const stepValidation = useMemo(
+    () => validateStep(wizard.currentStep, wizard.data),
+    [wizard.currentStep, wizard.data]
+  );
+  const canGoNext = stepValidation.valid;
+
+  const handleNext = useCallback(() => {
+    if (!canGoNext && stepValidation.missing?.length) {
+      toast.error(
+        `Champs requis : ${stepValidation.missing.join(", ")}`,
+        { id: "wizard-validation" }
+      );
+      return;
+    }
+    // Log wizard tracking
+    if (typeof window !== "undefined") {
+      const label = getStepLabel(wizard.currentStep);
+      const snapshot = getWizardTrackingSnapshot(wizard.data);
+      console.groupCollapsed(
+        `[PrintPilot Wizard ${method.toUpperCase()}] Étape ${wizard.currentStep} terminée — ${label}`
+      );
+      console.log("Step", `${wizard.currentStep} — ${label}`);
+      console.log("Product type", wizard.data.productType ?? null);
+      console.log("Method", method);
+      console.log("Tracking snapshot", snapshot);
+      console.log("Snapshot (complet)", JSON.stringify(snapshot, null, 2));
+      console.log("Données brutes (récap)", JSON.parse(JSON.stringify(wizard.data)));
+      console.groupEnd();
+    }
+    wizard.nextStep();
+  }, [canGoNext, stepValidation.missing, wizard.currentStep, wizard.data, wizard.nextStep, method]);
+
+  const handlePrev = useCallback(
+    () => wizard.prevStep(),
+    [wizard.prevStep]
+  );
+
+  const stepProps: StepProps = {
+    data: wizard.data,
+    updateData: wizard.updateData,
+    onNext: handleNext,
+    onReset: wizard.reset,
+  };
+
+  function renderStep() {
+    switch (currentStep) {
+      case 1:
+        return <StepProductType {...stepProps} />;
+      case 2:
+        return <StepQuantityFormat {...stepProps} />;
+      case 3:
+        return <StepPages {...stepProps} />;
+      case 4:
+        return <StepCouverture {...stepProps} />;
+      case 5:
+        return <StepInterior {...stepProps} />;
+      case 6:
+        return <StepDelivery {...stepProps} />;
+      case 7:
+        return <StepSummary {...stepProps} />;
+      default:
+        return null;
+    }
+  }
+
+  // Method badge style
+  const methodBadge = useMemo(() => {
+    if (method === "digital") {
+      return (
+        <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+          Numérique
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+        Offset
+      </span>
+    );
+  }, [method]);
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-6">
+      <WizardProgress
+        currentStep={currentStep}
+        visibleSteps={visibleSteps}
+        completedSteps={completedSteps}
+        onStepClick={(step) => wizard.goToStep(step as WizardStep)}
+      />
+
+      {/* Step content */}
+      <div className="rounded-2xl border bg-card shadow-sm">
+        <div className="p-6 md:p-8">{renderStep()}</div>
+      </div>
+
+      {/* Navigation */}
+      {currentStep !== 1 && currentStep !== 7 && (
+        <div className="space-y-2 pb-4">
+          {!canGoNext && stepValidation.missing && stepValidation.missing.length > 0 && (
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              Complétez les champs requis : {stepValidation.missing.join(", ")}
+            </p>
+          )}
+          <div className="flex items-center justify-between">
+            <Button variant="outline" onClick={handlePrev} disabled={isFirstStep}>
+              <ArrowLeft className="size-4" />
+              Précédent
+            </Button>
+            <Button
+              onClick={handleNext}
+              disabled={wizard.isCalculating || !canGoNext}
+            >
+              {wizard.isCalculating ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : isStepBeforeLast ? (
+                <Calculator className="size-4" />
+              ) : (
+                <ArrowRight className="size-4" />
+              )}
+              {isStepBeforeLast ? "Calculer" : "Suivant"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

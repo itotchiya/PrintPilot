@@ -7,12 +7,35 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, UserCog, Store, ShoppingCart, Asterisk } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Loader2, Shield, Building2, User } from "lucide-react";
 
+// Updated demo accounts for the new 3-tier role system
 const DEMO_ACCOUNTS = [
-  { email: "superadmin@printpilot.fr", password: "admin123", label: "SuperAdmin", icon: UserCog },
-  { email: "admin@printpilot.fr", password: "admin123", label: "Fournisseur", icon: Store },
-  { email: "acheteur@printpilot.fr", password: "admin123", label: "Acheteur", icon: ShoppingCart },
+  { 
+    email: "superadmin@printquote.com", 
+    password: "admin123", 
+    label: "Super Admin", 
+    icon: Shield,
+    description: "Full platform access",
+    color: "text-purple-600 bg-purple-100"
+  },
+  { 
+    email: "supplier@printquote.com", 
+    password: "admin123", 
+    label: "Supplier", 
+    icon: Building2,
+    description: "Manage clients & pricing",
+    color: "text-green-600 bg-green-100"
+  },
+  { 
+    email: "client@printquote.com", 
+    password: "admin123", 
+    label: "Client", 
+    icon: User,
+    description: "Generate quotes & compare",
+    color: "text-blue-600 bg-blue-100"
+  },
 ] as const;
 
 export default function LoginPage() {
@@ -40,7 +63,7 @@ export default function LoginPage() {
     });
 
     if (result?.error) {
-      setError("Identifiants invalides");
+      setError("Invalid credentials");
       setIsLoading(false);
       return;
     }
@@ -50,111 +73,123 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="w-full max-w-[360px] mx-auto">
-      <div className="mb-8">
-        <Asterisk className="h-8 w-8 text-primary mb-4" />
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground mb-2">
-          Bon retour
+    <div className="w-full max-w-[420px] mx-auto space-y-6">
+      {/* Header */}
+      <div className="text-center">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 mb-4">
+          <Shield className="h-6 w-6 text-primary" />
+        </div>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          Welcome Back
         </h1>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Accédez à vos devis, commandes et gestion de production en un seul endroit.
+        <p className="text-sm text-muted-foreground mt-2">
+          Access your quotes, suppliers, and print management in one place.
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-6">
-        {error && (
-          <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-        
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Votre e-mail</Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              placeholder="votre@email.fr"
-              autoComplete="email"
-              required
-              disabled={isLoading}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-11 px-3 shadow-none bg-background/50 border-border/60 focus-visible:ring-1 focus-visible:ring-primary/50"
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="password">Mot de passe</Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              placeholder="••••••••"
-              autoComplete="current-password"
-              required
-              disabled={isLoading}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="h-11 px-3 shadow-none bg-background/50 border-border/60 focus-visible:ring-1 focus-visible:ring-primary/50"
-            />
-          </div>
-        </div>
+      {/* Login Form */}
+      <Card>
+        <CardContent className="p-6">
+          <form onSubmit={onSubmit} className="space-y-4">
+            {error && (
+              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="your@email.com"
+                autoComplete="email"
+                required
+                disabled={isLoading}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-11"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="••••••••"
+                autoComplete="current-password"
+                required
+                disabled={isLoading}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-11"
+              />
+            </div>
 
-        <Button 
-          type="submit" 
-          className="w-full h-11 bg-foreground text-background hover:bg-foreground/90 font-medium" 
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Connexion...
-            </>
-          ) : (
-            "Se connecter"
-          )}
-        </Button>
+            <Button 
+              type="submit" 
+              className="w-full h-11" 
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign In"
+              )}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-        <div className="relative my-8">
+      {/* Demo Accounts */}
+      <div className="space-y-3">
+        <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-border/40" />
+            <span className="w-full border-t border-border" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
             <span className="bg-background px-2 text-muted-foreground">
-              Comptes démo
+              Demo Accounts
             </span>
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="grid gap-2">
           {DEMO_ACCOUNTS.map((account) => {
             const Icon = account.icon;
             return (
-              <Button
+              <button
                 key={account.email}
                 type="button"
-                variant="outline"
-                size="sm"
-                className="flex-1 h-10 border-border/50 shadow-none text-xs bg-background/50 hover:bg-muted/50 px-0"
                 onClick={() => fillDemo(account)}
-                title={account.label}
+                className="flex items-center gap-3 rounded-lg border border-border p-3 text-sm transition-colors hover:border-primary/30 hover:bg-accent text-left w-full"
               >
-                <Icon className="h-4 w-4" />
-                <span className="sr-only">{account.label}</span>
-              </Button>
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${account.color}`}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium leading-none truncate">{account.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground truncate">{account.description}</p>
+                </div>
+              </button>
             );
           })}
         </div>
+      </div>
 
-        <p className="mt-8 text-center text-sm text-muted-foreground">
-          Pas encore de compte ?{" "}
-          <Link href="/register" className="font-medium text-foreground hover:underline transition-colors">
-            S'inscrire
-          </Link>
-        </p>
-      </form>
+      {/* Footer */}
+      <p className="text-center text-sm text-muted-foreground">
+        Don&apos;t have an account?{" "}
+        <Link href="/register" className="font-medium text-primary hover:underline transition-colors">
+          Sign up
+        </Link>
+      </p>
     </div>
   );
 }

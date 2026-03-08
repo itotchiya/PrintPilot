@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { CATEGORY_CONFIG, getModel, errorResponse, markFournisseurConfigCustomized } from "../../_helpers";
+import { CATEGORY_CONFIG, getModel, errorResponse, markSupplierConfigCustomized } from "../../_helpers";
 
 type RouteParams = { params: Promise<{ category: string; id: string }> };
 
@@ -55,7 +55,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const model = getModel(config.model);
     const updated = await model.update({ where: { id }, data });
     if (user?.role === "FOURNISSEUR" && user?.id) {
-      await markFournisseurConfigCustomized(user.id);
+      await markSupplierConfigCustomized(user.id);
     }
     return NextResponse.json(updated);
   } catch (error) {
@@ -80,7 +80,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     const model = getModel(config.model);
     await model.delete({ where: { id } });
     if (user?.role === "FOURNISSEUR" && user?.id) {
-      await markFournisseurConfigCustomized(user.id);
+      await markSupplierConfigCustomized(user.id);
     }
     return NextResponse.json({ success: true });
   } catch (error) {

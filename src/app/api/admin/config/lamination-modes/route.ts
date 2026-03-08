@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { errorResponse, markFournisseurConfigCustomized } from "../_helpers";
+import { errorResponse, markSupplierConfigCustomized } from "../_helpers";
 
 export async function GET() {
   try {
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const mode = await prisma.laminationMode.create({ data: body });
     if (user?.role === "FOURNISSEUR" && user?.id) {
-      await markFournisseurConfigCustomized(user.id);
+      await markSupplierConfigCustomized(user.id);
     }
     return NextResponse.json(mode, { status: 201 });
   } catch (error) {

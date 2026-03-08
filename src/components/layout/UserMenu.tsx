@@ -11,9 +11,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, User, Shield, Sun, Moon, Monitor } from "lucide-react";
+import { LogOut, User, Shield, Sun, Moon, Monitor, Building2 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+
+// Updated role labels for 3-tier system
+const roleLabels: Record<string, string> = {
+  SUPER_ADMIN: "Super Admin",
+  SUPPLIER: "Supplier",
+  CLIENT: "Client",
+  // Legacy mappings
+  ADMIN: "Administrator",
+  EMPLOYEE: "Employee",
+  FOURNISSEUR: "Supplier",
+  ACHETEUR: "Client",
+};
 
 export function UserMenu() {
   const { data: session } = useSession();
@@ -28,7 +40,29 @@ export function UserMenu() {
     .toUpperCase()
     .slice(0, 2) ?? "U";
 
-  const isAdmin = session.user.role === "ADMIN";
+  const role = session.user.role;
+  const isSuperAdmin = role === "SUPER_ADMIN";
+  const isSupplier = role === "SUPPLIER" || role === "FOURNISSEUR";
+  const isClient = role === "CLIENT" || role === "ACHETEUR";
+
+  // Determine dashboard link based on role
+  let dashboardHref = "/dashboard";
+  let dashboardLabel = "Dashboard";
+  let DashboardIcon = User;
+
+  if (isSuperAdmin) {
+    dashboardHref = "/admin/dashboard";
+    dashboardLabel = "Admin Dashboard";
+    DashboardIcon = Shield;
+  } else if (isSupplier) {
+    dashboardHref = "/supplier/dashboard";
+    dashboardLabel = "Supplier Dashboard";
+    DashboardIcon = Building2;
+  } else if (isClient) {
+    dashboardHref = "/client/dashboard";
+    dashboardLabel = "My Quotes";
+    DashboardIcon = User;
+  }
 
   return (
     <DropdownMenu>
@@ -39,19 +73,25 @@ export function UserMenu() {
               {initials}
             </AvatarFallback>
           </Avatar>
-          <span className="hidden font-medium md:inline-block">
-            {session.user.name}
-          </span>
+          <div className="hidden md:flex md:flex-col md:items-start">
+            <span className="font-medium leading-tight">{session.user.name}</span>
+            <span className="text-[10px] text-muted-foreground">
+              {roleLabels[role] ?? role}
+            </span>
+          </div>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuLabel className="font-normal">
           <p className="text-sm font-medium">{session.user.name}</p>
           <p className="text-xs text-muted-foreground">{session.user.email}</p>
+          <p className="text-[10px] text-primary mt-1">
+            {roleLabels[role] ?? role}
+          </p>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5">
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Thème</p>
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Theme</p>
           <div className="flex gap-1">
             <button
               onClick={() => setTheme("light")}
@@ -63,7 +103,7 @@ export function UserMenu() {
               )}
             >
               <Sun className="h-3.5 w-3.5" />
-              Clair
+              Light
             </button>
             <button
               onClick={() => setTheme("dark")}
@@ -75,7 +115,7 @@ export function UserMenu() {
               )}
             >
               <Moon className="h-3.5 w-3.5" />
-              Sombre
+              Dark
             </button>
             <button
               onClick={() => setTheme("system")}
@@ -92,27 +132,36 @@ export function UserMenu() {
           </div>
         </div>
         <DropdownMenuSeparator />
-        {isAdmin && (
+        {/* Role-specific links */}
+        {isSuperAdmin && (
           <DropdownMenuItem asChild>
-            <Link href="/admin/config" className="cursor-pointer">
+            <Link href="/admin/dashboard" className="cursor-pointer">
               <Shield className="mr-2 h-4 w-4" />
-              Administration
+              Admin Dashboard
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {isSupplier && (
+          <DropdownMenuItem asChild>
+            <Link href="/supplier/dashboard" className="cursor-pointer">
+              <Building2 className="mr-2 h-4 w-4" />
+              Supplier Dashboard
             </Link>
           </DropdownMenuItem>
         )}
         <DropdownMenuItem asChild>
-          <Link href="/dashboard" className="cursor-pointer">
-            <User className="mr-2 h-4 w-4" />
-            Mes devis
+          <Link href={dashboardHref} className="cursor-pointer">
+            <DashboardIcon className="mr-2 h-4 w-4" />
+            {dashboardLabel}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onClick={() => signOut({ callbackUrl: "/" })}
+          onClick={() => signOut({ callbackUrl: "/login" })}
           className="cursor-pointer text-destructive focus:text-destructive"
         >
           <LogOut className="mr-2 h-4 w-4" />
-          Se déconnecter
+          Sign Out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
