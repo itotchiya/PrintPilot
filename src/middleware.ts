@@ -7,12 +7,6 @@ import type { NextRequest } from 'next/server';
  * Handles security checks at the edge before requests reach the application.
  */
 
-// Routes that should be protected by rate limiting
-const RATE_LIMITED_ROUTES = [
-  '/api/auth/',
-  '/api/invitations',
-];
-
 // Public routes that don't require checks
 const PUBLIC_ROUTES = [
   '/_next/',
@@ -30,12 +24,6 @@ function isPublicRoute(path: string): boolean {
   return PUBLIC_ROUTES.some((route) => path.startsWith(route));
 }
 
-/**
- * Check if a path should be rate limited
- */
-function isRateLimitedRoute(path: string): boolean {
-  return RATE_LIMITED_ROUTES.some((route) => path.startsWith(route));
-}
 
 /**
  * Get client IP from request headers
@@ -64,13 +52,31 @@ function validateOrigin(request: NextRequest): boolean {
     return true; // Allow requests without origin (curl, mobile apps)
   }
 
+  const host = request.headers.get('host');
+  if (host && origin.includes(host)) {
+    return true; // Fast pass for same-origin requests
+  }
+
   const allowedOrigins = [
     process.env.NEXTAUTH_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
     'http://localhost:3000',
     'https://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://127.0.0.1:3000',
+    'https://hdprint.vercel.app',
   ].filter(Boolean);
 
-  return allowedOrigins.some((allowed) => origin === allowed);
+  if (allowedOrigins.some((allowed) => origin === allowed)) {
+    return true;
+  }
+
+  // Allow deployed Vercel previews dynamically
+  if (origin.endsWith('.vercel.app')) {
+    return true;
+  }
+
+  return false;
 }
 
 export function middleware(request: NextRequest) {

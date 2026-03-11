@@ -73,7 +73,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = (user as { role: string }).role;
-        token.supplierProfile = (user as { supplierProfile: any }).supplierProfile;
+        token.supplierProfile = (user as import("next-auth").User).supplierProfile;
       }
 
       // Handle session update
@@ -94,7 +94,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as { id: string }).id = token.id as string;
         (session.user as { role: string }).role = token.role as string;
-        (session.user as { supplierProfile: any }).supplierProfile = token.supplierProfile;
+        (session.user as import("next-auth").User).supplierProfile = token.supplierProfile || null;
       }
       return session;
     },
